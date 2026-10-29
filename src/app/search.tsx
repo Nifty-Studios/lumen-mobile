@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { FlatList, TextInput, View } from "react-native";
+import { FlatList, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
 import type { Block } from "@lumen/shared/schema/client";
 import { lumen } from "../db/lumen";
 import { PageRow } from "../components/PageRow";
+import { Icon } from "../components/Icon";
 import { useColors } from "../theme";
 
 interface Hit {
@@ -31,21 +32,24 @@ export default function Search() {
 
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
-      <TextInput
-        autoFocus
-        value={query}
-        onChangeText={setQuery}
-        placeholder="Search pages"
-        placeholderTextColor={c.muted}
-        style={{ margin: 12, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10, backgroundColor: c.hover, color: c.text, fontSize: 16 }}
-      />
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 10, margin: 12, paddingHorizontal: 14, borderRadius: 16, backgroundColor: c.hover }}>
+        <Icon name="search" size={18} color={c.faint} />
+        <TextInput
+          autoFocus
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Search every page"
+          placeholderTextColor={c.faint}
+          style={{ flex: 1, paddingVertical: 12, color: c.text, fontSize: 16 }}
+        />
+      </View>
       <FlatList
         data={hits}
         keyboardShouldPersistTaps="handled"
         keyExtractor={(h) => h.page.id}
-        renderItem={({ item }) => (
-          <PageRow page={item.page} subtitle={item.snippet} onPress={() => router.replace(`/page/${item.page.id}`)} />
-        )}
+        contentContainerStyle={{ paddingHorizontal: 8 }}
+        ListEmptyComponent={query ? <Text style={{ color: c.muted, padding: 24, textAlign: "center" }}>Nothing found for “{query}”</Text> : undefined}
+        renderItem={({ item }) => <PageRow page={item.page} subtitle={item.snippet} onPress={() => router.replace(`/page/${item.page.id}`)} />}
       />
     </View>
   );

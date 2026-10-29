@@ -1,10 +1,50 @@
-import { useColorScheme } from "react-native";
+import type { ThemeTokens } from "@lumen/shared/ambient";
+import { useAmbient } from "./ambient/AmbientProvider";
 
-const light = { bg: "#ffffff", text: "#37352f", muted: "#91918e", hover: "#f1f1ef", border: "#e9e9e7", accent: "#2383e2", danger: "#e03e3e" };
-const dark: typeof light = { bg: "#191919", text: "#e6e6e4", muted: "#7f7f7c", hover: "#2a2a2a", border: "#2f2f2f", accent: "#529cca", danger: "#ff7369" };
+export interface Colors {
+  dark: boolean;
+  /** Opaque page background (the glass, flattened: no blur on Android). */
+  bg: string;
+  surface: string;
+  text: string;
+  muted: string;
+  faint: string;
+  hover: string;
+  active: string;
+  border: string;
+  accent: string;
+  accentSoft: string;
+  accentText: string;
+  danger: string;
+  scrim: string;
+  shadow: string;
+  tokens: ThemeTokens;
+}
 
-export type Colors = typeof light;
-export const useColors = (): Colors & { dark: boolean } => {
-  const isDark = useColorScheme() === "dark";
-  return { ...(isDark ? dark : light), dark: isDark };
+/** Theme colors that follow the sky (shared/ambient/theme.ts). */
+export const useColors = (): Colors => {
+  const { theme: t } = useAmbient();
+  return {
+    dark: t.dark,
+    bg: t.solid,
+    surface: t.surface,
+    text: t.text,
+    muted: t.muted,
+    faint: t.faint,
+    hover: t.hover,
+    active: t.active,
+    border: t.border,
+    accent: t.accent,
+    accentSoft: t.accentSoft,
+    accentText: t.accentText,
+    danger: t.danger,
+    scrim: t.scrim,
+    shadow: t.shadow,
+    tokens: t,
+  };
 };
+
+export const FONTS = {
+  serif: "Fraunces_600SemiBold",
+  serifLight: "Fraunces_300Light",
+} as const;
