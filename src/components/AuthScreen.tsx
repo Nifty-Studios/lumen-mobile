@@ -65,7 +65,7 @@ export function AuthScreen({ onDone, onLater, onClose }: { onDone: () => void; o
               <Text style={{ fontFamily: FONTS.serif, fontSize: 34, color: c.text }}>Lumen</Text>
             </View>
             <Text style={{ color: c.muted, fontSize: 14, lineHeight: 20, marginTop: 6, marginBottom: 18 }}>
-              {mode === "signup" ? "Your notes on every device, and shared with whoever you choose." : "Welcome back. Your notes are waiting."}
+              {mode === "signup" ? "Your notes on all your devices." : "Welcome back. Your notes are waiting."}
             </Text>
 
             <View style={[styles.tabs, { backgroundColor: c.hover }]}>

@@ -6,7 +6,8 @@ import { useFonts, Fraunces_300Light, Fraunces_600SemiBold } from "@expo-google-
 import { lumen } from "../db/lumen";
 import { AmbientProvider } from "../ambient/AmbientProvider";
 import { AuthScreen } from "../components/AuthScreen";
-import { NoticeBanner } from "../components/NoticeBanner";
+import { NoticeBanner, playChime } from "../components/NoticeBanner";
+import { updates } from "../lib/updates";
 import { LoadingMark, WelcomeVideo } from "../components/Intro";
 import { FONTS, useColors } from "../theme";
 
@@ -52,6 +53,16 @@ export default function RootLayout() {
       closeLive?.();
       sub.remove();
       offAccount();
+    };
+  }, [boot.ready, boot.auth]);
+
+  useEffect(() => {
+    if (!boot.ready || boot.auth) return;
+    const off = updates.onAvailable(playChime);
+    const stop = updates.start();
+    return () => {
+      off();
+      stop();
     };
   }, [boot.ready, boot.auth]);
 

@@ -70,7 +70,7 @@ export default function Share() {
   if (!user)
     return (
       <View style={[styles.wrap, { backgroundColor: c.bg }]}>
-        <Text style={{ color: c.muted, fontSize: 15, lineHeight: 21 }}>Sharing needs an account, so the people you invite can reach your notes.</Text>
+        <Text style={{ color: c.muted, fontSize: 15, lineHeight: 21 }}>Sign in to share pages.</Text>
         <Pressable onPress={() => router.replace("/signin")} style={[styles.primary, { backgroundColor: c.accent }]}>
           <Text style={{ color: c.accentText, fontWeight: "600", fontSize: 15 }}>Sign in or create an account</Text>
         </Pressable>

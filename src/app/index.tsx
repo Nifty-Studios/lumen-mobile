@@ -16,6 +16,7 @@ import { SkyCard } from "../ambient/SkyCard";
 import { weatherIcon } from "../ambient/weatherIcon";
 import { useAmbient } from "../ambient/AmbientProvider";
 import { FONTS, useColors } from "../theme";
+import { updates, useUpdate } from "../lib/updates";
 
 interface Row {
   node: PageNode;
@@ -146,6 +147,45 @@ function AccountCard() {
   );
 }
 
+/** A new version of Lumen: download it, then hand it to Android's installer. */
+function UpdateCard() {
+  const c = useColors();
+  const u = useUpdate();
+  if (u.phase === "idle") return null;
+  const title = { available: `Lumen ${u.version} is here`, downloading: `Downloading ${u.version}…`, ready: "Ready to install", error: "The download didn't finish" }[u.phase];
+  const note = {
+    available: "A new version is ready to download.",
+    downloading: "You can keep writing.",
+    ready: "Tap Install, then confirm on the next screen.",
+    error: "Check your connection and try again.",
+  }[u.phase];
+  const action = u.phase === "available" ? ["Download", updates.download] : u.phase === "ready" ? ["Install", updates.install] : u.phase === "error" ? ["Try again", updates.retry] : null;
+  return (
+    <View style={[styles.card, { backgroundColor: c.accentSoft }]}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+        <Icon name={u.phase === "error" ? "triangle-alert" : "download"} size={17} color={c.accent} />
+        <Text style={{ color: c.text, fontSize: 15, fontWeight: "600" }}>{title}</Text>
+      </View>
+      <Text style={{ color: c.muted, fontSize: 13.5, lineHeight: 19, marginTop: 4 }}>{note}</Text>
+      {u.phase === "downloading" ? (
+        <View style={{ height: 6, borderRadius: 3, overflow: "hidden", backgroundColor: c.active, marginTop: 10 }}>
+          <View style={{ height: 6, width: `${Math.round(u.progress * 100)}%`, backgroundColor: c.accent }} />
+        </View>
+      ) : null}
+      {action ? (
+        <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
+          <Pressable onPress={() => void (action[1] as () => Promise<void> | void)()} style={[styles.cardButton, { backgroundColor: c.accent }]}>
+            <Text style={{ color: c.accentText, fontWeight: "600" }}>{action[0] as string}</Text>
+          </Pressable>
+          <Pressable onPress={() => updates.later()} style={styles.cardButton}>
+            <Text style={{ color: c.muted }}>Later</Text>
+          </Pressable>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 function RoundButton({ icon, ink, onPress, label }: { icon: IconName; ink: string; onPress: () => void; label: string }) {
   return (
     <Pressable onPress={onPress} hitSlop={6} accessibilityLabel={label} style={({ pressed }) => [styles.round, { backgroundColor: pressed ? "rgba(0,0,0,0.28)" : "rgba(0,0,0,0.16)" }]}>
@@ -253,6 +293,7 @@ export default function Home() {
           contentContainerStyle={{ paddingHorizontal: 8, paddingTop: 10, paddingBottom: 40 }}
           ListHeaderComponent={
             <>
+              <UpdateCard />
               <AccountCard />
               {data && data.spaces.length > 1 && data.space ? (
                 <Pressable

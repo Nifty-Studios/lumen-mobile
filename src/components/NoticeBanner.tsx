@@ -12,7 +12,7 @@ import { Icon } from "./Icon";
 import { useColors } from "../theme";
 
 let chime: ReturnType<typeof createAudioPlayer> | undefined;
-function playChime() {
+export function playChime() {
   try {
     chime ??= createAudioPlayer(require("../../assets/sounds/notify.wav"));
     chime.seekTo(0);

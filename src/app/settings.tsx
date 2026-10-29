@@ -74,7 +74,7 @@ function Account() {
   if (!available) return null;
   if (!user)
     return (
-      <Section title="Account" note="You're using Lumen on this phone only. Sign in to sync with your other devices and share pages.">
+      <Section title="Account" note="Sign in to see your notes on all your devices and share pages.">
         <Pressable onPress={() => router.push("/signin")} style={[styles.button, { backgroundColor: c.accent }]}>
           <Icon name="log-in" size={17} color={c.accentText} />
           <Text style={{ color: c.accentText, fontSize: 15, fontWeight: "600" }}>Sign in or create an account</Text>
@@ -105,7 +105,7 @@ function Account() {
         <Text style={{ color: c.text, fontSize: 15 }}>Sign out</Text>
       </Pressable>
       <Text style={{ color: c.muted, fontSize: 13, lineHeight: 18, marginTop: 8 }}>
-        Your notes stay on this phone and keep working offline; they just stop syncing. If someone else signs in here, your unsent changes go to your account first.
+        Your notes stay on this phone. They just stop syncing.
       </Text>
     </Section>
   );
@@ -132,7 +132,7 @@ function AiConnection() {
   return (
     <Section
       title="AI connection"
-      note="A private link that lets Claude (or any assistant that supports MCP) read your notes, answer questions, add notes and sort pages. In the Claude app or on claude.ai: Settings → Connectors → Add custom connector, then paste the link."
+      note="A private link that lets Claude read and edit your notes. In Claude, open Settings → Connectors → Add custom connector and paste it."
     >
       <Pressable disabled={busy} onPress={create} style={[styles.button, { backgroundColor: c.accent }]}>
         {busy ? <ActivityIndicator color={c.accentText} /> : <Icon name="link" size={17} color={c.accentText} />}
@@ -160,7 +160,7 @@ function Appearance() {
   const c = useColors();
   const { settings, update } = useAmbient();
   return (
-    <Section title="Appearance" note="Dark mode lifts a little while the sun is up and goes deep at night; light mode turns warm after dark.">
+    <Section title="Appearance" note="Lumen shifts with the time of day.">
       <Label>Theme</Label>
       <Chips
         value={settings.theme}
@@ -174,7 +174,7 @@ function Appearance() {
       <View style={styles.toggleRow}>
         <View style={{ flex: 1 }}>
           <Text style={{ color: c.text, fontSize: 15 }}>See the sky while writing</Text>
-          <Text style={{ color: c.muted, fontSize: 13, lineHeight: 18, marginTop: 2 }}>Pages become frosted glass over the live sky, so you watch the weather change as you type.</Text>
+          <Text style={{ color: c.muted, fontSize: 13, lineHeight: 18, marginTop: 2 }}>Show the sky behind your pages.</Text>
         </View>
         <Switch value={settings.skyBehindPage} onValueChange={(skyBehindPage) => update({ skyBehindPage })} trackColor={{ true: c.accent, false: c.active }} thumbColor="#fff" />
       </View>
@@ -227,7 +227,7 @@ function MoodCard({ mood, active, onPress }: { mood: Mood; active: boolean; onPr
 function Environment() {
   const { settings, update } = useAmbient();
   return (
-    <Section title="Sky & mood" note="Live follows your real sun and weather. Or set the scene yourself.">
+    <Section title="Sky & mood" note="Show your real sky, or pick a mood.">
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingVertical: 4 }} style={{ marginHorizontal: -16 }}>
         <View style={{ width: 6 }} />
         {MOODS.map((m) => (
@@ -258,14 +258,14 @@ function Location() {
 
   const loc = settings.location;
   return (
-    <Section title="Location & weather" note="Sets sunrise, sunset and the weather. With live weather on, only the coordinates go to Open-Meteo, about every 15 minutes.">
+    <Section title="Location & weather" note="Used for sunrise, sunset and the weather.">
       <View style={[styles.card, { backgroundColor: c.hover }]}>
         <View style={[styles.tile, { backgroundColor: c.accentSoft }]}>
           <Icon name="map-pin" size={20} color={c.accent} />
         </View>
         <View style={{ flex: 1 }}>
           <Text style={{ color: c.text, fontSize: 15 }}>{loc?.label ?? "Not set yet"}</Text>
-          <Text style={{ color: c.muted, fontSize: 12.5 }}>{status ?? (loc ? `${loc.source === "device" ? "From this phone" : loc.source === "city" ? "Chosen city" : "From your timezone"} · ${loc.lat.toFixed(2)}, ${loc.lon.toFixed(2)}` : "Using your timezone")}</Text>
+          <Text style={{ color: c.muted, fontSize: 12.5 }}>{status ?? (loc ? (loc.source === "device" ? "From this phone" : loc.source === "city" ? "Chosen city" : "From your timezone") : "Using your timezone")}</Text>
         </View>
       </View>
       <Pressable
@@ -339,7 +339,7 @@ function Data() {
   );
 
   return (
-    <Section title="Backup & import" note="Your whole workspace and its history in one .zip, with every page as readable Markdown. Restore it on any device, even offline.">
+    <Section title="Backup & import" note="All your notes in one file. Restore it on any device.">
       <View style={{ gap: 10 }}>
         {button("download", "Export backup", () =>
           run("Packing your notes…", async () => {
@@ -365,7 +365,7 @@ function Data() {
           }))}
       </View>
       <Text style={{ color: c.muted, fontSize: 12.5, lineHeight: 18, marginTop: 10 }}>
-        For Notion: Settings → General → Export all workspace content → Markdown & CSV, with subpages.
+        From Notion: Settings → Export all workspace content → Markdown & CSV.
       </Text>
       {busy ? (
         <View style={[styles.row, { gap: 10 }]}>
