@@ -8,7 +8,6 @@
     "@blocknote/react": "^0.56.0",
     "@expo-google-fonts/fraunces": "^0.4.1",
     "@expo/metro-runtime": "~58.0.15",
-    "@fontsource-variable/fraunces": "^5.3.0",
     "@lumen/shared": "link:../shared",
     "@mantine/core": "^9.7.4",
     "@mantine/hooks": "^9.7.4",
@@ -39,13 +38,15 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@fontsource-variable/fraunces": "^5.3.0",
     "@types/react": "~19.3.0",
     "typescript": "~6.0.3"
   },
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "fonts": "node scripts/embed-fonts.mjs"
   },
   "private": true
 }

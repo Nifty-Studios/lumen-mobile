@@ -21,7 +21,14 @@
       "expo-sqlite",
       "./plugins/with-cmake-version",
       "expo-sharing",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Lumen uses your location to show the real sky and weather where you are.",
+          "isAndroidBackgroundLocationEnabled": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

@@ -40,7 +40,8 @@ function phased(t: Animated.Value, phase: number, from: number, to: number) {
   return t.interpolate({ inputRange: [0, 1 - p, 1 - p + 0.0001, 1], outputRange: [at(p), to, from, at(p)] });
 }
 
-export function SkyCard({ height, children }: { height: number; children?: ReactNode }) {
+/** `bodyTop` is where the sun and moon sit: below the screen's top controls, beside the clock. */
+export function SkyCard({ height, bodyTop, children }: { height: number; bodyTop: number; children?: ReactNode }) {
   const { sky, theme, settings } = useAmbient();
   const [width, setWidth] = useState(0);
   const onLayout = (e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width);
@@ -52,8 +53,8 @@ export function SkyCard({ height, children }: { height: number; children?: React
       {width > 0 && (
         <>
           {sky.stars > 0.05 && <Stars width={width} height={height} opacity={sky.stars} motion={motion} />}
-          {sky.moon.visible > 0.05 && <Moon x={width - 64} y={44} phase={sky.moon.phase} opacity={sky.moon.visible * (1 - sky.sun.dim * 0.85)} />}
-          {sky.sun.visible > 0.05 && <Sun x={width - 66} y={46 + (1 - Math.min(1, Math.max(0, sky.altitude / 60))) * 34} color={sky.sun.color} opacity={sky.sun.visible * (theme.dark ? 0.8 : 1)} dim={sky.sun.dim} motion={motion} />}
+          {sky.moon.visible > 0.05 && <Moon x={width - 78} y={bodyTop} phase={sky.moon.phase} opacity={sky.moon.visible * (1 - sky.sun.dim * 0.85)} />}
+          {sky.sun.visible > 0.05 && <Sun x={width - 80} y={bodyTop + (1 - Math.min(1, Math.max(0, sky.altitude / 60))) * 30} color={sky.sun.color} opacity={sky.sun.visible * (theme.dark ? 0.8 : 1)} dim={sky.sun.dim} motion={motion} />}
           <Clouds width={width} height={height} cover={sky.clouds} wind={sky.wind} light={sky.cloudLight} shade={sky.cloudShade} motion={motion} />
           {sky.precip !== "none" && <Precip width={width} height={height} snow={sky.precip === "snow"} intensity={sky.intensity} wind={sky.wind} motion={motion} />}
         </>
@@ -144,7 +145,8 @@ const Cloud = memo(function Cloud(props: { width: number; top: number; size: num
     const n = 4 + Math.floor(r() * 3);
     return Array.from({ length: n }, (_, i) => {
       const k = (i + 0.5) / n;
-      return { cx: 20 + k * 160, cy: 60 - Math.sin(k * Math.PI) * (14 + r() * 16), r: 18 + Math.sin(k * Math.PI) * (12 + r() * 14) };
+      // Sized to stay inside the 200x100 canvas: a puff past its edge is cut off flat.
+      return { cx: 20 + k * 160, cy: 78 - Math.sin(k * Math.PI) * (10 + r() * 12), r: 16 + Math.sin(k * Math.PI) * (10 + r() * 10) };
     });
   }, [seed]);
   return (
@@ -157,9 +159,9 @@ const Cloud = memo(function Cloud(props: { width: number; top: number; size: num
             <Stop offset="1" stopColor={shade} stopOpacity={0} />
           </RadialGradient>
         </Defs>
-        <Ellipse cx={100} cy={72} rx={92} ry={22} fill={`url(#puff${seed})`} />
+        <Ellipse cx={100} cy={84} rx={92} ry={16} fill={`url(#puff${seed})`} />
         {puffs.map((p, i) => (
-          <Circle key={i} cx={p.cx} cy={p.cy} r={p.r * 1.35} fill={`url(#puff${seed})`} />
+          <Circle key={i} cx={p.cx} cy={p.cy} r={p.r * 1.3} fill={`url(#puff${seed})`} />
         ))}
       </Svg>
     </Animated.View>

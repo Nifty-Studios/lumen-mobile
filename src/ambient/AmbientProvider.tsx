@@ -5,7 +5,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { AppState, useColorScheme } from "react-native";
 import { computeSky, themeFor, type LumenSettings, type SavedLocation, type SkyState, type ThemeTokens, type Weather } from "@lumen/shared/ambient";
 import { lumen } from "../db/lumen";
-import { deviceLocation, timezonePlace } from "../lib/location";
+import { deviceLocation, placeName, timezonePlace, UNNAMED } from "../lib/location";
 
 interface Ambient {
   settings: LumenSettings;
@@ -67,19 +67,37 @@ export function AmbientProvider({ children }: { children: ReactNode }) {
     return loc;
   }, [setLocation]);
 
-  // First run: the phone's location, else the timezone's city.
+  // First run: the timezone's city right away, replaced by the phone's location once it has a fix.
   useEffect(() => {
     if (lumen.getSettings().location) return;
+    let located = false;
+    timezonePlace()
+      .then((loc) => {
+        if (loc && !located) return setLocation(loc);
+      })
+      .catch(console.warn);
     deviceLocation()
-      .catch(() => timezonePlace())
-      .then((loc) => loc && setLocation(loc))
-      .catch(console.error);
+      .then((loc) => {
+        located = true;
+        return setLocation(loc);
+      })
+      .catch(console.warn);
   }, [setLocation]);
 
   useEffect(() => {
     let alive = true;
     lumen.cachedWeather().then((w) => alive && w && setWeather((cur) => cur ?? w));
-    const refresh = () => lumen.refreshWeather().then((w) => alive && w && setWeather(w), () => {});
+    const refresh = () => {
+      lumen.refreshWeather().then((w) => alive && w && setWeather(w), () => {});
+      const loc = lumen.getSettings().location;
+      if (loc?.source === "device" && loc.label === UNNAMED)
+        placeName(loc.lat, loc.lon).then(
+          (label) => {
+            if (label && alive) return lumen.updateSettings({ location: { ...loc, label } });
+          },
+          () => {},
+        );
+    };
     refresh();
     const timer = setInterval(refresh, 15 * 60_000);
     const sub = AppState.addEventListener("change", (s) => s === "active" && refresh());

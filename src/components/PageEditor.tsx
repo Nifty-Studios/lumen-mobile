@@ -3,9 +3,7 @@
 // The page body (icon, title, BlockNote editor) running in a webview. It only edits; the
 // native side owns the database and receives changes through the onSave/onRename actions.
 
-import "@blocknote/core/fonts/inter.css";
 import "@blocknote/mantine/style.css";
-import "@fontsource-variable/fraunces";
 import { useEffect, useRef, useState, type CSSProperties, type Ref } from "react";
 import { SuggestionMenuController, useCreateBlockNote, type SuggestionMenuProps } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
@@ -14,6 +12,7 @@ import type { Block as EditorBlock, PartialBlock } from "@blocknote/core";
 import { useDOMImperativeHandle, type DOMImperativeFactory, type DOMProps } from "expo/dom";
 import { filterSlashItems, lumenSchema, slashItems, type SlashItem } from "@lumen/shared/editor/blocknote";
 import { iconSvg, type IconName } from "@lumen/shared/icons";
+import { EDITOR_FONT_CSS } from "./editorFonts";
 
 const SAVE_DELAY = 300;
 const MAX_IMAGE_SIDE = 1600;
@@ -228,11 +227,19 @@ function Title({ initial, onRename, onEnter }: { initial: string; onRename: (t: 
   );
 }
 
-const css = `
+// BlockNote positions its menus for a page that shrinks when the keyboard opens.
+if (typeof document !== "undefined") {
+  const viewport = document.querySelector('meta[name="viewport"]');
+  const content = viewport?.getAttribute("content") ?? "";
+  if (viewport && !content.includes("interactive-widget")) viewport.setAttribute("content", `${content}, interactive-widget=resizes-content`);
+}
+
+// Body text uses the phone's own font, like the native screens; titles and headings use Fraunces.
+const css = EDITOR_FONT_CSS + `
   html, body { margin: 0; background: var(--bg); -webkit-tap-highlight-color: transparent; }
   *, *:focus, *:focus-visible { outline: none !important; }
   ::selection { background: var(--selection); }
-  .page { min-height: 100vh; padding: 6px 0 0; background: var(--bg); color: var(--text); font-family: Inter, system-ui, sans-serif; }
+  .page { min-height: 100vh; padding: 6px 0 0; background: var(--bg); color: var(--text); font-family: system-ui, Roboto, sans-serif; }
   .icon-tile { display: grid; place-items: center; width: 56px; height: 56px; margin: 8px 0 14px 22px; border: 0; border-radius: 18px; background: var(--hover); }
   .title { box-sizing: border-box; display: block; width: 100%; padding: 0 22px; margin: 0 0 14px; border: 0; resize: none; overflow: hidden;
     background: transparent; color: inherit; font: 600 32px/1.18 "Fraunces Variable", Georgia, serif; letter-spacing: -0.01em; font-variation-settings: "SOFT" 60; }
@@ -247,7 +254,7 @@ const css = `
     --bn-colors-selected-background: var(--accent-soft); --bn-colors-selected-text: var(--text);
     --bn-colors-disabled-background: var(--hover); --bn-colors-disabled-text: var(--faint);
     --bn-colors-shadow: var(--shadow); --bn-colors-border: transparent; --bn-colors-side-menu: var(--faint);
-    --bn-border-radius: 12px; --mantine-color-default-border: transparent;
+    --bn-border-radius: 12px; --mantine-color-default-border: transparent; --bn-font-family: system-ui, Roboto, sans-serif;
   }
   .bn-container .bn-editor { padding-inline: 22px; background: transparent; font-size: 16.5px; line-height: 1.65; }
   .bn-container [data-is-empty-and-focused] .bn-inline-content::before { color: var(--faint); }
@@ -257,14 +264,16 @@ const css = `
   .bn-block-content[data-content-type="codeBlock"] { background: var(--hover); border-radius: 12px; }
   .bn-block-content[data-content-type="checkListItem"] input[type="checkbox"] { accent-color: var(--accent); }
   .bn-block-content[data-content-type="checkListItem"][data-checked="true"] .bn-inline-content { color: var(--faint); }
-  .bn-container .mantine-Menu-dropdown, .bn-container .bn-toolbar, .bn-container .mantine-Popover-dropdown { border: none !important; box-shadow: 0 18px 40px -18px var(--shadow) !important; }
+  .bn-container .mantine-Menu-dropdown, .bn-container .bn-toolbar, .bn-container .mantine-Popover-dropdown { border: none !important; box-shadow: 0 18px 40px -18px var(--shadow) !important;
+    -webkit-backdrop-filter: blur(24px) saturate(1.3); backdrop-filter: blur(24px) saturate(1.3); }
 
   .lumen-callout { display: flex; gap: 10px; align-items: flex-start; width: 100%; padding: 12px 14px 12px 10px; border-radius: 14px; background: var(--accent-soft); }
   .lumen-callout-icon { flex: none; display: grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: 9px; background: transparent; color: var(--accent); }
   .lumen-callout-content { flex: 1; min-width: 0; }
 
   .slash { width: min(330px, 88vw); max-height: min(380px, 50vh); overflow-y: auto; padding: 6px; border-radius: 18px; background: var(--surface);
-    color: var(--text); box-shadow: 0 24px 60px -18px var(--shadow), 0 4px 14px -6px var(--shadow); font-family: Inter, system-ui, sans-serif; }
+    -webkit-backdrop-filter: blur(24px) saturate(1.3); backdrop-filter: blur(24px) saturate(1.3);
+    color: var(--text); box-shadow: 0 24px 60px -18px var(--shadow), 0 4px 14px -6px var(--shadow); font-family: system-ui, Roboto, sans-serif; }
   .slash.empty { padding: 12px 16px; font-size: 13px; color: var(--muted); }
   .slash-group { padding: 10px 10px 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); }
   .slash-item { display: flex; align-items: center; gap: 12px; width: 100%; padding: 6px 8px; border: 0; border-radius: 12px; background: transparent; color: inherit; text-align: left; font: inherit; }

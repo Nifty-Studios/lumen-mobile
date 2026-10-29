@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Alert, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, AppState, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { pageTitle, type PageNode } from "@lumen/shared/client";
@@ -42,11 +42,21 @@ function timeParts(date: Date, format: ClockFormat) {
 
 const greeting = (h: number) => (h < 5 ? "Good night" : h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : h < 21 ? "Good evening" : "Good night");
 
+/** The time, updated right as each minute turns and when the app comes back to the front. */
 function useNow() {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 15_000);
-    return () => clearInterval(t);
+    let timer: ReturnType<typeof setTimeout>;
+    const tick = () => {
+      setNow(new Date());
+      timer = setTimeout(tick, 60_000 - (Date.now() % 60_000) + 20);
+    };
+    timer = setTimeout(tick, 60_000 - (Date.now() % 60_000) + 20);
+    const sub = AppState.addEventListener("change", (s) => s === "active" && setNow(new Date()));
+    return () => {
+      clearTimeout(timer);
+      sub.remove();
+    };
   }, []);
   return now;
 }
@@ -63,7 +73,7 @@ function SkyHeader() {
   const sub = sky.live ? (settings.location?.label ?? "Live sky") : "Mood";
 
   return (
-    <SkyCard height={insets.top + 250}>
+    <SkyCard height={insets.top + 250} bodyTop={insets.top + 112}>
       <View style={[styles.topRow, { paddingTop: insets.top + 6 }]}>
         <Text style={[styles.brand, { color: ink }]}>Lumen</Text>
         <View style={{ flexDirection: "row", gap: 8 }}>
