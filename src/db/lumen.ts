@@ -1,6 +1,7 @@
 // The app's data layer: @lumen/shared/client over expo-sqlite. The sync API keeps each
 // batch atomic on the JS thread, so nothing else can interleave with a transaction.
 
+import "../polyfills";
 import { openDatabaseSync, type SQLiteBindValue } from "expo-sqlite";
 import { createLumen, type QueryMethod, type SqlDriver } from "@lumen/shared/client";
 
