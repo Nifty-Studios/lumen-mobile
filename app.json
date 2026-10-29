@@ -3,7 +3,7 @@
     "name": "Lumen",
     "slug": "lumen",
     "scheme": "lumen",
-    "version": "0.1.0",
+    "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -14,7 +14,8 @@
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#0b0c1a"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "versionCode": 1
     },
     "plugins": [
       "expo-router",
@@ -29,7 +30,9 @@
           "isAndroidBackgroundLocationEnabled": false
         }
       ],
-      "expo-audio"
+      "expo-audio",
+      "expo-video",
+      "./plugins/with-release-signing"
     ],
     "experiments": {
       "typedRoutes": true

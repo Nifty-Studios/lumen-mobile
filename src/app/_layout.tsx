@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, AppState, Text, View } from "react-native";
+import { AppState, Text, View } from "react-native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useFonts, Fraunces_300Light, Fraunces_600SemiBold } from "@expo-google-fonts/fraunces";
@@ -7,15 +7,21 @@ import { lumen } from "../db/lumen";
 import { AmbientProvider } from "../ambient/AmbientProvider";
 import { AuthScreen } from "../components/AuthScreen";
 import { NoticeBanner } from "../components/NoticeBanner";
+import { LoadingMark, WelcomeVideo } from "../components/Intro";
 import { FONTS, useColors } from "../theme";
 
 export default function RootLayout() {
   const [boot, setBoot] = useState<{ error?: string; ready?: boolean; auth?: boolean }>({});
+  const [welcome, setWelcome] = useState(false);
   const [fonts] = useFonts({ Fraunces_300Light, Fraunces_600SemiBold });
 
   useEffect(() => {
     lumen.start().then(
-      ({ needsAuth }) => setBoot({ ready: true, auth: needsAuth }),
+      ({ needsAuth }) => {
+        // First launch on this phone: the welcome animation plays before sign-in.
+        if (needsAuth && !lumen.getSettings().welcomed) setWelcome(true);
+        setBoot({ ready: true, auth: needsAuth });
+      },
       (e) => setBoot({ error: String(e) }),
     );
   }, []);
@@ -49,11 +55,21 @@ export default function RootLayout() {
     };
   }, [boot.ready, boot.auth]);
 
-  if (!boot.ready || !fonts)
+  if (boot.error)
     return (
       <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#0b0c1a", padding: 24 }}>
-        {boot.error ? <Text style={{ color: "#ff8a80" }}>Lumen could not start: {boot.error}</Text> : <ActivityIndicator color="#8d8a99" />}
+        <Text style={{ color: "#ff8a80" }}>Lumen could not start: {boot.error}</Text>
       </View>
+    );
+  if (!boot.ready || !fonts) return <LoadingMark />;
+  if (welcome)
+    return (
+      <WelcomeVideo
+        onDone={() => {
+          setWelcome(false);
+          void lumen.updateSettings({ welcomed: true });
+        }}
+      />
     );
 
   return (
