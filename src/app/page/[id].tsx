@@ -29,7 +29,8 @@ export default function PageScreen() {
   const blocks = session?.blocks;
 
   // Save pending edits whenever the screen loses focus (back, or opening a sub-page).
-  useFocusEffect(useCallback(() => () => editor.current?.flush(), []));
+  // flush only exists once the webview has loaded; before that there is nothing to save.
+  useFocusEffect(useCallback(() => () => editor.current?.flush?.(), []));
 
   const loaded = !!page && !!blocks;
   const initial = useMemo(() => {
