@@ -28,7 +28,8 @@
           "locationWhenInUsePermission": "Lumen uses your location to show the real sky and weather where you are.",
           "isAndroidBackgroundLocationEnabled": false
         }
-      ]
+      ],
+      "expo-audio"
     ],
     "experiments": {
       "typedRoutes": true

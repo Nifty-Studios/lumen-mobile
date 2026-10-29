@@ -3,7 +3,7 @@ import { Alert, AppState, FlatList, Pressable, StyleSheet, Text, View } from "re
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { canEdit } from "@lumen/shared";
-import { pageTitle, type PageNode } from "@lumen/shared/client";
+import { isGroup, pageTitle, type PageNode } from "@lumen/shared/client";
 import type { Space } from "@lumen/shared/schema/client";
 import { moodOf, textOnSky, type ClockFormat } from "@lumen/shared/ambient";
 import type { IconName } from "@lumen/shared/icons";
@@ -11,6 +11,7 @@ import { lumen } from "../db/lumen";
 import { useAccount, useLive } from "../data/hooks";
 import { PageRow } from "../components/PageRow";
 import { Icon } from "../components/Icon";
+import { ChoiceSheet, NameDialog, type Choice } from "../components/Sheets";
 import { SkyCard } from "../ambient/SkyCard";
 import { weatherIcon } from "../ambient/weatherIcon";
 import { useAmbient } from "../ambient/AmbientProvider";
@@ -25,8 +26,13 @@ interface Row {
   sharedStart?: boolean;
 }
 
-const flatten = (nodes: PageNode[], open: Set<string>, editable: boolean, depth = 0): Row[] =>
-  nodes.flatMap((node) => [{ node, depth, editable }, ...(open.has(node.page.id) ? flatten(node.children, open, editable, depth + 1) : [])]);
+/** Pages open when expanded; groups are open unless collapsed (both kept in `toggled`). */
+const isOpen = (node: PageNode, toggled: Set<string>) => (isGroup(node.page) ? !toggled.has(node.page.id) : toggled.has(node.page.id));
+const flatten = (nodes: PageNode[], toggled: Set<string>, editable: boolean, depth = 0): Row[] =>
+  nodes.flatMap((node) => [
+    { node, depth, editable },
+    ...(isOpen(node, toggled) ? flatten(node.children, toggled, editable, isGroup(node.page) ? depth : depth + 1) : []),
+  ]);
 
 async function newPage(parentId: string | null, spaceId?: string) {
   // A page inside a shared page belongs to that page's workspace, which may not be on this phone.
@@ -179,12 +185,54 @@ export default function Home() {
       return next;
     });
 
-  const actions = (node: PageNode) =>
-    Alert.alert(pageTitle(node.page), undefined, [
-      { text: "Add sub-page", onPress: () => newPage(node.page.id, node.page.space_id).then(() => setOpen((p) => new Set(p).add(node.page.id))) },
-      { text: "Move to trash", style: "destructive", onPress: () => lumen.setPageAlive(node.page.id, false) },
-      { text: "Cancel", style: "cancel" },
-    ]);
+  const [sheet, setSheet] = useState<{ title: string; choices: Choice[] }>();
+  const [naming, setNaming] = useState<{ title: string; initial?: string; save: (name: string) => void }>();
+
+  /** Everywhere a page can go: the top level, groups and other pages (not itself or inside it). */
+  const moveTargets = (node: PageNode): Choice[] => {
+    const out: Choice[] = node.page.parent_table === "space" ? [] : [{ label: "Top level", icon: "layers", onPress: () => void lumen.movePage(node.page.id, null) }];
+    const walk = (nodes: PageNode[], depth: number) => {
+      for (const n of nodes) {
+        if (n.page.id === node.page.id) continue;
+        out.push({
+          label: pageTitle(n.page),
+          icon: isGroup(n.page) ? "folder" : "file-text",
+          depth,
+          checked: n.page.id === node.page.parent_id,
+          onPress: () => void lumen.movePage(node.page.id, n.page.id).catch((e) => Alert.alert("Can't move it there", String(e?.message ?? e))),
+        });
+        walk(n.children, depth + 1);
+      }
+    };
+    walk(data?.tree ?? [], 0);
+    return out;
+  };
+
+  const actions = (node: PageNode) => {
+    const group = isGroup(node.page);
+    setSheet({
+      title: pageTitle(node.page),
+      choices: group
+        ? [
+            { label: "Add a page to this group", icon: "plus", onPress: () => void newPage(node.page.id, node.page.space_id) },
+            { label: "Rename group", icon: "pencil", onPress: () => setNaming({ title: "Rename group", initial: pageTitle(node.page), save: (n) => void lumen.renamePage(node.page.id, n) }) },
+            {
+              label: "Remove group (its pages stay)",
+              icon: "trash",
+              danger: true,
+              onPress: async () => {
+                for (const child of node.children) await lumen.movePage(child.page.id, null);
+                await lumen.setPageAlive(node.page.id, false);
+              },
+            },
+          ]
+        : [
+            { label: "Add sub-page", icon: "plus", onPress: () => void newPage(node.page.id, node.page.space_id).then(() => setOpen((p) => new Set(p).add(node.page.id))) },
+            { label: "Move to…", icon: "folder", onPress: () => setTimeout(() => setSheet({ title: `Move “${pageTitle(node.page)}” to`, choices: moveTargets(node) }), 50) },
+            { label: "Move to trash", icon: "trash", danger: true, onPress: () => void lumen.setPageAlive(node.page.id, false) },
+          ],
+    });
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: c.tokens.skyBottom }}>
@@ -209,13 +257,15 @@ export default function Home() {
               {data && data.spaces.length > 1 && data.space ? (
                 <Pressable
                   onPress={() =>
-                    Alert.alert("Workspaces", undefined, [
-                      ...data.spaces.map((s) => ({
-                        text: `${s.space.id === data.space?.id ? "✓ " : ""}${s.space.name}${s.role === "owner" ? "" : s.role === "editor" ? " · can edit" : " · can view"}`,
+                    setSheet({
+                      title: "Workspaces",
+                      choices: data.spaces.map((s) => ({
+                        label: `${s.space.name}${s.role === "owner" ? "" : s.role === "editor" ? " · can edit" : " · can view"}`,
+                        icon: "layers",
+                        checked: s.space.id === data.space?.id,
                         onPress: () => void lumen.setCurrentSpace(s.space.id).then(() => setPicked((n) => n + 1)),
                       })),
-                      { text: "Cancel", style: "cancel" },
-                    ])
+                    })
                   }
                   style={styles.spaceRow}
                 >
@@ -225,12 +275,33 @@ export default function Home() {
                   <Icon name="chevrons-up-down" size={15} color={c.faint} />
                 </Pressable>
               ) : null}
-              <Text style={[styles.section, { color: c.faint }]}>PAGES</Text>
+              <View style={styles.pagesHeader}>
+                <Text style={[styles.section, { color: c.faint, flex: 1 }]}>PAGES</Text>
+                {data?.space && canEdit(data.role) ? (
+                  <Pressable
+                    hitSlop={8}
+                    onPress={() => setNaming({ title: "New group", save: (name) => void lumen.createGroup(data.space!, name) })}
+                    style={styles.newGroup}
+                  >
+                    <Icon name="folder" size={15} color={c.faint} />
+                    <Text style={{ color: c.faint, fontSize: 12.5 }}>New group</Text>
+                  </Pressable>
+                ) : null}
+              </View>
             </>
           }
           renderItem={({ item: { node, depth, editable, sharedStart } }) => (
             <>
             {sharedStart ? <Text style={[styles.section, { color: c.faint, marginTop: 14 }]}>SHARED WITH ME</Text> : null}
+            {isGroup(node.page) ? (
+              <Pressable onPress={() => toggle(node.page.id)} onLongPress={editable ? () => actions(node) : undefined} style={styles.groupRow}>
+                <Icon name={isOpen(node, open) ? "chevron-down" : "chevron-right"} size={14} color={c.faint} />
+                <Text style={{ color: c.faint, fontSize: 12, letterSpacing: 1.4, fontWeight: "600", flex: 1 }} numberOfLines={1}>
+                  {pageTitle(node.page).toUpperCase()}
+                </Text>
+                {node.children.length === 0 ? <Text style={{ color: c.faint, fontSize: 12 }}>empty</Text> : null}
+              </Pressable>
+            ) : (
             <PageRow
               page={node.page}
               depth={depth}
@@ -240,6 +311,7 @@ export default function Home() {
               onPress={() => router.push(`/page/${node.page.id}`)}
               onLongPress={editable ? () => actions(node) : undefined}
             />
+            )}
             </>
           )}
           ListEmptyComponent={tree ? <Text style={{ color: c.muted, padding: 24, textAlign: "center" }}>No pages yet. Tap + to start one.</Text> : undefined}
@@ -251,11 +323,16 @@ export default function Home() {
           }
         />
       </View>
+      <ChoiceSheet title={sheet?.title} choices={sheet?.choices ?? []} onClose={() => setSheet(undefined)} />
+      <NameDialog title={naming?.title} initial={naming?.initial} onSave={(n) => naming?.save(n)} onClose={() => setNaming(undefined)} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  pagesHeader: { flexDirection: "row", alignItems: "center", paddingRight: 8 },
+  newGroup: { flexDirection: "row", alignItems: "center", gap: 5, paddingVertical: 4 },
+  groupRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, paddingTop: 14, paddingBottom: 6 },
   topRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 18 },
   brand: { fontFamily: FONTS.serif, fontSize: 20, letterSpacing: -0.2 },
   round: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center" },

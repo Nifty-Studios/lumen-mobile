@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, Share, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { ENV_TIMES, ENV_WEATHERS, MOODS, computeSky, searchPlaces, themeFor, type Mood, type Place } from "@lumen/shared/ambient";
 import type { IconName } from "@lumen/shared/icons";
@@ -18,6 +18,7 @@ export default function Settings() {
   return (
     <ScrollView style={{ flex: 1, backgroundColor: c.bg }} contentContainerStyle={{ padding: 16, paddingBottom: 48 }} keyboardShouldPersistTaps="handled">
       <Account />
+      <AiConnection />
       <Appearance />
       <Environment />
       <Location />
@@ -106,6 +107,51 @@ function Account() {
       <Text style={{ color: c.muted, fontSize: 13, lineHeight: 18, marginTop: 8 }}>
         Your notes stay on this phone and keep working offline; they just stop syncing. If someone else signs in here, your unsent changes go to your account first.
       </Text>
+    </Section>
+  );
+}
+
+function AiConnection() {
+  const c = useColors();
+  const { user } = useAccount();
+  const [links, setLinks] = useState<{ id: string; created_at: number }[]>();
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (user) lumen.account.aiLinks().then(setLinks, () => setLinks([]));
+  }, [user]);
+  if (!user) return null;
+  const create = async () => {
+    setBusy(true);
+    try {
+      const url = await lumen.account.createAiLink();
+      setLinks(await lumen.account.aiLinks());
+      await Share.share({ message: url, title: "Lumen AI connection" });
+    } catch {}
+    setBusy(false);
+  };
+  return (
+    <Section
+      title="AI connection"
+      note="A private link that lets Claude (or any assistant that supports MCP) read your notes, answer questions, add notes and sort pages. In the Claude app or on claude.ai: Settings → Connectors → Add custom connector, then paste the link."
+    >
+      <Pressable disabled={busy} onPress={create} style={[styles.button, { backgroundColor: c.accent }]}>
+        {busy ? <ActivityIndicator color={c.accentText} /> : <Icon name="link" size={17} color={c.accentText} />}
+        <Text style={{ color: c.accentText, fontSize: 15, fontWeight: "600" }}>Create a link and copy it</Text>
+      </Pressable>
+      {links?.map((l) => (
+        <View key={l.id} style={[styles.row, { gap: 10 }]}>
+          <Icon name="link" size={16} color={c.muted} />
+          <Text style={{ flex: 1, color: c.text }}>Link from {new Date(l.created_at).toLocaleDateString()}</Text>
+          <Pressable
+            onPress={async () => {
+              await lumen.account.revokeAiLink(l.id);
+              setLinks(await lumen.account.aiLinks());
+            }}
+          >
+            <Text style={{ color: c.danger }}>Revoke</Text>
+          </Pressable>
+        </View>
+      ))}
     </Section>
   );
 }

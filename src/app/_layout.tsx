@@ -6,6 +6,7 @@ import { useFonts, Fraunces_300Light, Fraunces_600SemiBold } from "@expo-google-
 import { lumen } from "../db/lumen";
 import { AmbientProvider } from "../ambient/AmbientProvider";
 import { AuthScreen } from "../components/AuthScreen";
+import { NoticeBanner } from "../components/NoticeBanner";
 import { FONTS, useColors } from "../theme";
 
 export default function RootLayout() {
@@ -66,7 +67,10 @@ export default function RootLayout() {
           }}
         />
       ) : (
-        <ThemedStack />
+        <>
+          <ThemedStack />
+          <NoticeBanner />
+        </>
       )}
     </AmbientProvider>
   );

@@ -1,7 +1,7 @@
 // Create an account or log in, over the live sky. At first launch it has "Later" (stay on
 // this phone only); opened later from Settings or the home card, it has a close button.
 
-import { useState } from "react";
+import { useRef, useState, type ComponentRef } from "react";
 import { ActivityIndicator, KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MIN_PASSWORD } from "@lumen/shared";
@@ -24,6 +24,8 @@ export function AuthScreen({ onDone, onLater, onClose }: { onDone: () => void; o
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [blocked, setBlocked] = useState<AccountSwitchError>();
+  const emailRef = useRef<ComponentRef<typeof TextInput>>(null);
+  const passwordRef = useRef<ComponentRef<typeof TextInput>>(null);
 
   const submit = async (discardUnsent = false) => {
     if (busy) return;
@@ -82,9 +84,13 @@ export function AuthScreen({ onDone, onLater, onClose }: { onDone: () => void; o
             </View>
 
             {mode === "signup" ? (
-              <TextInput style={[styles.input, field]} placeholder="Your name" placeholderTextColor={c.faint} value={name} onChangeText={setName} autoComplete="name" />
+              <TextInput style={[styles.input, field]} placeholder="Your name" placeholderTextColor={c.faint} value={name} onChangeText={setName} autoComplete="name" autoFocus returnKeyType="next" submitBehavior="submit" onSubmitEditing={() => emailRef.current?.focus()} />
             ) : null}
             <TextInput
+              ref={emailRef}
+              returnKeyType="next"
+              submitBehavior="submit"
+              onSubmitEditing={() => passwordRef.current?.focus()}
               style={[styles.input, field]}
               placeholder="Email"
               placeholderTextColor={c.faint}
@@ -95,6 +101,8 @@ export function AuthScreen({ onDone, onLater, onClose }: { onDone: () => void; o
               autoComplete="email"
             />
             <TextInput
+              ref={passwordRef}
+              returnKeyType="done"
               style={[styles.input, field]}
               placeholder={mode === "signup" ? `Password (${MIN_PASSWORD}+ characters)` : "Password"}
               placeholderTextColor={c.faint}
