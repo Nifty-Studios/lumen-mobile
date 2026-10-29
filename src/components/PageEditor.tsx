@@ -3,8 +3,9 @@
 // The page body (icon, title, BlockNote editor) running in a webview. It only edits; the
 // native side owns the database and receives changes through the onSave/onRename actions.
 
-import "@blocknote/mantine/style.css";
-import { useEffect, useRef, useState, type CSSProperties, type Ref } from "react";
+// BlockNote's own styles, flattened: Metro drops the @imports in @blocknote/mantine/style.css.
+import "./editor.css";
+import { useEffect, useRef, useState, type Ref } from "react";
 import { SuggestionMenuController, useCreateBlockNote, type SuggestionMenuProps } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
 import { en } from "@blocknote/core/locales";
@@ -101,6 +102,7 @@ export default function PageEditor({ ref, title, icon, initialContent, dark, col
     editor.focus();
   };
 
+  // On :root rather than the page: BlockNote draws its menus and toolbars in a separate layer.
   const vars = {
     "--bg": colors.bg,
     "--surface": colors.surface,
@@ -115,12 +117,14 @@ export default function PageEditor({ ref, title, icon, initialContent, dark, col
     "--accent-text": colors.accentText,
     "--selection": colors.selection,
     "--shadow": colors.shadow,
-  } as CSSProperties;
+  };
+  const rootVars = `:root{${Object.entries(vars)
+    .map(([k, v]) => `${k}:${v}`)
+    .join(";")}}`;
 
   return (
     <div
       className="page"
-      style={vars}
       onPointerDown={(e) => {
         if (e.target === e.currentTarget) {
           e.preventDefault();
@@ -128,7 +132,7 @@ export default function PageEditor({ ref, title, icon, initialContent, dark, col
         }
       }}
     >
-      <style>{css}</style>
+      <style>{rootVars + css}</style>
       <button className="icon-tile" onClick={() => onIconPress()} aria-label="Change icon">
         <span dangerouslySetInnerHTML={svg(icon?.name ?? "file-text", 28, icon?.color ?? colors.muted)} />
       </button>
@@ -164,20 +168,43 @@ export default function PageEditor({ ref, title, icon, initialContent, dark, col
 
 function SlashMenu({ items, selectedIndex, onItemClick }: SuggestionMenuProps<SlashItem>) {
   const list = useRef<HTMLDivElement>(null);
+  const touch = useRef<{ x: number; y: number } | null>(null);
   useEffect(() => {
     list.current?.querySelector(`[data-index="${selectedIndex}"]`)?.scrollIntoView({ block: "nearest" });
   }, [selectedIndex]);
   if (!items.length) return <div className="slash empty">No blocks match</div>;
+  // A tap on anything that isn't text makes Android hide the keyboard, and the jump that follows
+  // can swallow the tap. So taps are handled on touchend with the default cancelled: the editor
+  // keeps focus and the keyboard stays up. A finger that moved was scrolling the list instead.
+  const tapped = (e: React.TouchEvent, item: SlashItem) => {
+    e.preventDefault();
+    const t = e.changedTouches[0];
+    const start = touch.current;
+    if (t && start && Math.hypot(t.clientX - start.x, t.clientY - start.y) < 10) onItemClick?.(item);
+  };
   let group = "";
   return (
-    <div ref={list} className="slash" onPointerDown={(e) => e.preventDefault()}>
+    <div
+      ref={list}
+      className="slash"
+      onPointerDown={(e) => e.preventDefault()}
+      onTouchStart={(e) => {
+        const t = e.touches[0];
+        touch.current = t ? { x: t.clientX, y: t.clientY } : null;
+      }}
+    >
       {items.map((item, i) => {
         const header = item.group !== group ? item.group : null;
         group = item.group;
         return (
           <div key={item.key}>
             {header && <div className="slash-group">{header}</div>}
-            <button data-index={i} className={i === selectedIndex ? "slash-item selected" : "slash-item"} onClick={() => onItemClick?.(item)}>
+            <button
+              data-index={i}
+              className={i === selectedIndex ? "slash-item selected" : "slash-item"}
+              onTouchEnd={(e) => tapped(e, item)}
+              onClick={() => onItemClick?.(item)}
+            >
               <span className="slash-icon" dangerouslySetInnerHTML={svg(item.icon, 18)} />
               <span className="slash-text">
                 <span className="slash-title">{item.title}</span>
@@ -246,7 +273,7 @@ const css = EDITOR_FONT_CSS + `
   .title::placeholder { color: var(--faint); }
   .filler { min-height: 45vh; }
 
-  .bn-container[data-color-scheme] {
+  .bn-root.bn-root {
     --bn-colors-editor-background: transparent; --bn-colors-editor-text: var(--text);
     --bn-colors-menu-background: var(--surface); --bn-colors-menu-text: var(--text);
     --bn-colors-tooltip-background: var(--surface); --bn-colors-tooltip-text: var(--text);
@@ -264,8 +291,14 @@ const css = EDITOR_FONT_CSS + `
   .bn-block-content[data-content-type="codeBlock"] { background: var(--hover); border-radius: 12px; }
   .bn-block-content[data-content-type="checkListItem"] input[type="checkbox"] { accent-color: var(--accent); }
   .bn-block-content[data-content-type="checkListItem"][data-checked="true"] .bn-inline-content { color: var(--faint); }
-  .bn-container .mantine-Menu-dropdown, .bn-container .bn-toolbar, .bn-container .mantine-Popover-dropdown { border: none !important; box-shadow: 0 18px 40px -18px var(--shadow) !important;
+  .bn-root .mantine-Menu-dropdown, .bn-root .bn-toolbar, .bn-root .mantine-Popover-dropdown { border: none !important; box-shadow: 0 18px 40px -18px var(--shadow) !important;
     -webkit-backdrop-filter: blur(24px) saturate(1.3); backdrop-filter: blur(24px) saturate(1.3); }
+  /* The formatting bar docked above the keyboard: full width, lifted by a soft shadow. */
+  .bn-root .bn-mobile-formatting-toolbar .bn-toolbar { width: 100%; padding: 4px 8px; gap: 2px; border-radius: 0;
+    box-shadow: 0 -14px 30px -20px var(--shadow) !important; }
+  .bn-root .bn-mobile-formatting-toolbar .bn-toolbar button { border-radius: 10px; color: var(--muted); }
+  .bn-root .bn-mobile-formatting-toolbar .bn-toolbar button[data-selected="true"] { color: var(--text); background: var(--hover); }
+  body:has(.slash) .bn-mobile-formatting-toolbar { display: none; }
 
   .lumen-callout { display: flex; gap: 10px; align-items: flex-start; width: 100%; padding: 12px 14px 12px 10px; border-radius: 14px; background: var(--accent-soft); }
   .lumen-callout-icon { flex: none; display: grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: 9px; background: transparent; color: var(--accent); }
