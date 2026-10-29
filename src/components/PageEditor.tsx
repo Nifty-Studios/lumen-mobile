@@ -12,7 +12,7 @@ import { BlockNoteView } from "@blocknote/mantine";
 import { en } from "@blocknote/core/locales";
 import type { Block as EditorBlock, PartialBlock } from "@blocknote/core";
 import { useDOMImperativeHandle, type DOMImperativeFactory, type DOMProps } from "expo/dom";
-import { filterSlashItems, lumenSchema, slashItems, type SlashItem } from "@lumen/shared/editor";
+import { filterSlashItems, lumenSchema, slashItems, type SlashItem } from "@lumen/shared/editor/blocknote";
 import { iconSvg, type IconName } from "@lumen/shared/icons";
 
 const SAVE_DELAY = 300;
