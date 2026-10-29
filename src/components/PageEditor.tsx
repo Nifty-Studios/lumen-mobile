@@ -10,8 +10,9 @@ import { SuggestionMenuController, useCreateBlockNote, type SuggestionMenuProps 
 import { BlockNoteView } from "@blocknote/mantine";
 import { en } from "@blocknote/core/locales";
 import type { Block as EditorBlock, PartialBlock } from "@blocknote/core";
+import type { RemoteUpdate } from "@lumen/shared/client";
 import { useDOMImperativeHandle, type DOMImperativeFactory, type DOMProps } from "expo/dom";
-import { filterSlashItems, lumenSchema, slashItems, type SlashItem } from "@lumen/shared/editor/blocknote";
+import { applyRemoteUpdate, filterSlashItems, lumenSchema, slashItems, snapshot, type SlashItem, type Snapshot } from "@lumen/shared/editor/blocknote";
 import { iconSvg, type IconName } from "@lumen/shared/icons";
 import { EDITOR_FONT_CSS } from "./editorFonts";
 
@@ -45,6 +46,10 @@ interface Props {
   title: string;
   icon: { name: string; color?: string } | null;
   initialContent: PartialBlock[] | null;
+  /** False for people who can only view the page. */
+  editable: boolean;
+  /** Other devices' latest edits; `seq` grows with each one. */
+  remote: { seq: number; update: RemoteUpdate } | undefined;
   dark: boolean;
   colors: EditorColors;
   onSave: (doc: EditorBlock[]) => Promise<void>;
@@ -64,7 +69,7 @@ async function imageToDataUrl(file: File): Promise<string> {
   return canvas.toDataURL(file.type === "image/png" ? "image/png" : "image/webp", 0.85);
 }
 
-export default function PageEditor({ ref, title, icon, initialContent, dark, colors, onSave, onRename, onIconPress }: Props) {
+export default function PageEditor({ ref, title, icon, initialContent, editable, remote, dark, colors, onSave, onRename, onIconPress }: Props) {
   const editor = useCreateBlockNote(
     {
       schema: lumenSchema,
@@ -76,13 +81,31 @@ export default function PageEditor({ ref, title, icon, initialContent, dark, col
   );
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const dirty = useRef(false);
+  // The blocks as last saved or received; anything else in the editor is unsaved typing.
+  const known = useRef<Snapshot | undefined>(undefined);
+  const applyingRemote = useRef(false);
+  const [remoteTitle, setRemoteTitle] = useState<string>();
 
   const flush = () => {
     clearTimeout(timer.current);
     if (!dirty.current) return;
     dirty.current = false;
+    known.current = snapshot(editor);
     onSave(editor.document as never).catch(console.error);
   };
+
+  useEffect(() => {
+    known.current ??= snapshot(editor);
+    if (!remote) return;
+    applyingRemote.current = true;
+    try {
+      known.current = applyRemoteUpdate(editor, remote.update, known.current);
+    } finally {
+      applyingRemote.current = false;
+    }
+    setRemoteTitle(remote.update.title);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [remote?.seq]);
 
   // The native screen calls flush() before it leaves; pagehide covers the app going away.
   useDOMImperativeHandle(ref as Ref<PageEditorRef>, () => ({ flush }), []);
@@ -126,23 +149,25 @@ export default function PageEditor({ ref, title, icon, initialContent, dark, col
     <div
       className="page"
       onPointerDown={(e) => {
-        if (e.target === e.currentTarget) {
+        if (e.target === e.currentTarget && editable) {
           e.preventDefault();
           focusEnd();
         }
       }}
     >
       <style>{rootVars + css}</style>
-      <button className="icon-tile" onClick={() => onIconPress()} aria-label="Change icon">
+      <button className="icon-tile" onClick={() => editable && onIconPress()} aria-label="Change icon">
         <span dangerouslySetInnerHTML={svg(icon?.name ?? "file-text", 28, icon?.color ?? colors.muted)} />
       </button>
-      <Title initial={title} onRename={onRename} onEnter={() => editor.focus()} />
+      <Title initial={title} remote={remoteTitle} readOnly={!editable} onRename={onRename} onEnter={() => editor.focus()} />
       <BlockNoteView
         editor={editor}
+        editable={editable}
         theme={dark ? "dark" : "light"}
         slashMenu={false}
         emojiPicker={false}
         onChange={() => {
+          if (applyingRemote.current) return;
           dirty.current = true;
           clearTimeout(timer.current);
           timer.current = setTimeout(flush, SAVE_DELAY);
@@ -219,10 +244,23 @@ function SlashMenu({ items, selectedIndex, onItemClick }: SuggestionMenuProps<Sl
   );
 }
 
-function Title({ initial, onRename, onEnter }: { initial: string; onRename: (t: string) => Promise<void>; onEnter: () => void }) {
+interface TitleProps {
+  initial: string;
+  /** A rename from another device. */
+  remote: string | undefined;
+  readOnly: boolean;
+  onRename: (t: string) => Promise<void>;
+  onEnter: () => void;
+}
+
+function Title({ initial, remote, readOnly, onRename, onEnter }: TitleProps) {
   const [value, setValue] = useState(initial);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const ref = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (remote !== undefined && document.activeElement !== ref.current) setValue(remote === "Untitled" ? "" : remote);
+  }, [remote]);
 
   useEffect(() => {
     const el = ref.current;
@@ -236,6 +274,7 @@ function Title({ initial, onRename, onEnter }: { initial: string; onRename: (t: 
       ref={ref}
       rows={1}
       value={value}
+      readOnly={readOnly}
       placeholder="Untitled"
       className="title"
       onChange={(e) => {
@@ -266,7 +305,7 @@ const css = EDITOR_FONT_CSS + `
   html, body { margin: 0; background: var(--bg); -webkit-tap-highlight-color: transparent; }
   *, *:focus, *:focus-visible { outline: none !important; }
   ::selection { background: var(--selection); }
-  .page { min-height: 100vh; padding: 6px 0 0; background: var(--bg); color: var(--text); font-family: system-ui, Roboto, sans-serif; }
+  .page { min-height: 100vh; padding: 6px 0 0; background: transparent; color: var(--text); font-family: system-ui, Roboto, sans-serif; }
   .icon-tile { display: grid; place-items: center; width: 56px; height: 56px; margin: 8px 0 14px 22px; border: 0; border-radius: 18px; background: var(--hover); }
   .title { box-sizing: border-box; display: block; width: 100%; padding: 0 22px; margin: 0 0 14px; border: 0; resize: none; overflow: hidden;
     background: transparent; color: inherit; font: 600 32px/1.18 "Fraunces Variable", Georgia, serif; letter-spacing: -0.01em; font-variation-settings: "SOFT" 60; }

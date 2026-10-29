@@ -5,31 +5,48 @@ import { StatusBar } from "expo-status-bar";
 import { useFonts, Fraunces_300Light, Fraunces_600SemiBold } from "@expo-google-fonts/fraunces";
 import { lumen } from "../db/lumen";
 import { AmbientProvider } from "../ambient/AmbientProvider";
+import { AuthScreen } from "../components/AuthScreen";
 import { FONTS, useColors } from "../theme";
 
 export default function RootLayout() {
-  const [boot, setBoot] = useState<{ error?: string; ready?: boolean }>({});
+  const [boot, setBoot] = useState<{ error?: string; ready?: boolean; auth?: boolean }>({});
   const [fonts] = useFonts({ Fraunces_300Light, Fraunces_600SemiBold });
 
   useEffect(() => {
     lumen.start().then(
-      () => setBoot({ ready: true }),
+      ({ needsAuth }) => setBoot({ ready: true, auth: needsAuth }),
       (e) => setBoot({ error: String(e) }),
     );
   }, []);
 
-  // Background sync once started: on an interval, after edits, and whenever the app comes back.
+  // Background sync once started: on an interval, after edits, and whenever the app comes back;
+  // plus a live socket while the app is in front and signed in.
   useEffect(() => {
-    if (!boot.ready || !lumen.sync) return;
-    const stop = lumen.sync.start();
+    const sync = lumen.sync;
+    if (!boot.ready || boot.auth || !sync) return;
+    const stop = sync.start();
+    let closeLive: (() => void) | undefined;
+    const updateLive = () => {
+      const want = AppState.currentState === "active" && !!lumen.account.current;
+      if (want && !closeLive) closeLive = sync.live();
+      if (!want && closeLive) {
+        closeLive();
+        closeLive = undefined;
+      }
+    };
+    updateLive();
     const sub = AppState.addEventListener("change", (s) => {
-      if (s === "active") lumen.sync?.sync().catch(() => {});
+      if (s === "active") sync.sync().catch(() => {});
+      updateLive();
     });
+    const offAccount = lumen.account.onChange(updateLive);
     return () => {
       stop();
+      closeLive?.();
       sub.remove();
+      offAccount();
     };
-  }, [boot.ready]);
+  }, [boot.ready, boot.auth]);
 
   if (!boot.ready || !fonts)
     return (
@@ -40,7 +57,17 @@ export default function RootLayout() {
 
   return (
     <AmbientProvider>
-      <ThemedStack />
+      {boot.auth ? (
+        <AuthScreen
+          onDone={() => setBoot({ ready: true })}
+          onLater={async () => {
+            await lumen.continueSignedOut();
+            setBoot({ ready: true });
+          }}
+        />
+      ) : (
+        <ThemedStack />
+      )}
     </AmbientProvider>
   );
 }
@@ -64,6 +91,8 @@ function ThemedStack() {
         <Stack.Screen name="search" options={{ title: "Search", animation: "fade" }} />
         <Stack.Screen name="trash" options={{ title: "Trash" }} />
         <Stack.Screen name="settings" options={{ title: "Settings" }} />
+        <Stack.Screen name="signin" options={{ headerShown: false, animation: "fade" }} />
+        <Stack.Screen name="share/[id]" options={{ title: "Share", presentation: "modal" }} />
       </Stack>
     </>
   );

@@ -34,8 +34,9 @@ const driver: SqlDriver = {
   },
 };
 
-// Sync is on when the server is configured (mobile/.env.local, not committed).
+// Accounts and sync are on when the server is configured (mobile/.env.local, not committed).
+// EXPO_PUBLIC_LUMEN_TOKEN is the shared token from before accounts, used once to claim old workspaces.
 const url = process.env.EXPO_PUBLIC_LUMEN_SERVER;
-const token = process.env.EXPO_PUBLIC_LUMEN_TOKEN;
+const legacyToken = process.env.EXPO_PUBLIC_LUMEN_TOKEN;
 
-export const lumen = createLumen(driver, { sync: url && token ? { url, token } : undefined });
+export const lumen = createLumen(driver, { server: url ? { url, deviceName: "Android phone", legacyToken } : undefined });

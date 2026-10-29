@@ -4,7 +4,9 @@ import { LinearGradient } from "expo-linear-gradient";
 import { ENV_TIMES, ENV_WEATHERS, MOODS, computeSky, searchPlaces, themeFor, type Mood, type Place } from "@lumen/shared/ambient";
 import type { IconName } from "@lumen/shared/icons";
 import type { ImportSummary } from "@lumen/shared/client";
+import { router } from "expo-router";
 import { lumen } from "../db/lumen";
+import { useAccount } from "../data/hooks";
 import { useAmbient } from "../ambient/AmbientProvider";
 import { weatherIcon } from "../ambient/weatherIcon";
 import { Icon } from "../components/Icon";
@@ -15,12 +17,13 @@ export default function Settings() {
   const c = useColors();
   return (
     <ScrollView style={{ flex: 1, backgroundColor: c.bg }} contentContainerStyle={{ padding: 16, paddingBottom: 48 }} keyboardShouldPersistTaps="handled">
+      <Account />
       <Appearance />
       <Environment />
       <Location />
       <Data />
       <Text style={{ color: c.faint, fontSize: 12, textAlign: "center", marginTop: 18 }}>
-        Lumen 0.1.0 · {lumen.sync ? "Sync on" : "Notes stay on this phone"} · Icons by Lucide
+        Lumen 0.1.0 · {lumen.account.current ? "Syncing" : "Notes stay on this phone"} · Icons by Lucide
       </Text>
     </ScrollView>
   );
@@ -63,7 +66,52 @@ function Chips<T extends string>({ value, options, onChange }: { value: T; optio
   );
 }
 
+function Account() {
+  const c = useColors();
+  const { user, available } = useAccount();
+  const [busy, setBusy] = useState(false);
+  if (!available) return null;
+  if (!user)
+    return (
+      <Section title="Account" note="You're using Lumen on this phone only. Sign in to sync with your other devices and share pages.">
+        <Pressable onPress={() => router.push("/signin")} style={[styles.button, { backgroundColor: c.accent }]}>
+          <Icon name="log-in" size={17} color={c.accentText} />
+          <Text style={{ color: c.accentText, fontSize: 15, fontWeight: "600" }}>Sign in or create an account</Text>
+        </Pressable>
+      </Section>
+    );
+  return (
+    <Section title="Account">
+      <View style={[styles.accountCard, { backgroundColor: c.hover }]}>
+        <View style={[styles.avatar, { backgroundColor: c.accentSoft }]}>
+          <Text style={{ color: c.accent, fontSize: 18, fontWeight: "600" }}>{user.name[0]?.toUpperCase()}</Text>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={{ color: c.text, fontSize: 16 }} numberOfLines={1}>{user.name}</Text>
+          <Text style={{ color: c.muted, fontSize: 13.5 }} numberOfLines={1}>{user.email}</Text>
+        </View>
+      </View>
+      <Pressable
+        disabled={busy}
+        onPress={async () => {
+          setBusy(true);
+          await lumen.signOut();
+          setBusy(false);
+        }}
+        style={[styles.button, { backgroundColor: c.hover, marginTop: 12 }]}
+      >
+        <Icon name="log-out" size={17} color={c.text} />
+        <Text style={{ color: c.text, fontSize: 15 }}>Sign out</Text>
+      </Pressable>
+      <Text style={{ color: c.muted, fontSize: 13, lineHeight: 18, marginTop: 8 }}>
+        Your notes stay on this phone and keep working offline; they just stop syncing. If someone else signs in here, your unsent changes go to your account first.
+      </Text>
+    </Section>
+  );
+}
+
 function Appearance() {
+  const c = useColors();
   const { settings, update } = useAmbient();
   return (
     <Section title="Appearance" note="Dark mode lifts a little while the sun is up and goes deep at night; light mode turns warm after dark.">
@@ -77,6 +125,13 @@ function Appearance() {
           { value: "dark", label: "Dark", icon: "moon" },
         ]}
       />
+      <View style={styles.toggleRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={{ color: c.text, fontSize: 15 }}>See the sky while writing</Text>
+          <Text style={{ color: c.muted, fontSize: 13, lineHeight: 18, marginTop: 2 }}>Pages become frosted glass over the live sky, so you watch the weather change as you type.</Text>
+        </View>
+        <Switch value={settings.skyBehindPage} onValueChange={(skyBehindPage) => update({ skyBehindPage })} trackColor={{ true: c.accent, false: c.active }} thumbColor="#fff" />
+      </View>
       <Label>Motion</Label>
       <Chips value={settings.motion} onChange={(motion) => update({ motion })} options={[{ value: "full", label: "Alive" }, { value: "calm", label: "Calm" }, { value: "still", label: "Still" }]} />
       <Label>Clock</Label>
@@ -284,6 +339,9 @@ function Data() {
 }
 
 const styles = StyleSheet.create({
+  toggleRow: { flexDirection: "row", alignItems: "center", gap: 12, marginTop: 16 },
+  accountCard: { flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 18, padding: 14 },
+  avatar: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
   chip: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 14 },
   mood: { width: 142, borderRadius: 18, overflow: "hidden" },
   moodSky: { height: 78 },

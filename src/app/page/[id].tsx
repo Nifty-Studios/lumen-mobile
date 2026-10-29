@@ -1,15 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, FlatList, Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, FlatList, Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { Stack, router, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { PartialBlock } from "@blocknote/core";
 import { pageTitle } from "@lumen/shared/client";
 import { isEditorBlock, toEditorBlock } from "@lumen/shared/editor";
 import { ICON_COLORS, PAGE_ICON_NAMES, iconColor, resolveIcon, type IconColor } from "@lumen/shared/icons";
 import type { Block } from "@lumen/shared/schema/client";
-import type { PageSession } from "@lumen/shared/client";
+import type { PageSession, RemoteUpdate } from "@lumen/shared/client";
 import { lumen } from "../../db/lumen";
 import { useLive } from "../../data/hooks";
 import PageEditor, { type PageEditorRef } from "../../components/PageEditor";
+import { SkyCard } from "../../ambient/SkyCard";
+import { useAmbient } from "../../ambient/AmbientProvider";
 import { Icon } from "../../components/Icon";
 import { useColors } from "../../theme";
 
@@ -19,13 +22,24 @@ export default function PageScreen() {
   const editor = useRef<PageEditorRef>(null);
   const page = useLive(() => lumen.getBlock(id), [id]);
   const [picking, setPicking] = useState(false);
+  const readOnly = useLive(() => lumen.roleOf(id), [id]) === "viewer";
+  const { settings } = useAmbient();
+  const glass = settings.skyBehindPage;
+  const headerHeight = useSafeAreaInsets().top + 56; // Android's stack header
+  const { height } = useWindowDimensions();
 
   // The editor's blocks load once per page; after that the editor owns the document.
   const [session, setSession] = useState<PageSession>();
   useEffect(() => {
-    lumen.openPage(id).then(setSession, console.error);
+    let open: PageSession | undefined;
+    lumen.openPage(id).then((s) => setSession((open = s)), console.error);
+    return () => open?.close();
   }, [id]);
   const blocks = session?.blocks;
+
+  // Other devices' edits, handed to the editor as they arrive (seq tells it something is new).
+  const [remote, setRemote] = useState<{ seq: number; update: RemoteUpdate }>();
+  useEffect(() => session?.onRemote((update) => setRemote((r) => ({ seq: (r?.seq ?? 0) + 1, update }))), [session]);
 
   // Save pending edits whenever the screen loses focus (back, or opening a sub-page).
   // flush only exists once the webview has loaded; before that there is nothing to save.
@@ -46,8 +60,10 @@ export default function PageScreen() {
   if (!page || !initial) return <View style={{ flex: 1, backgroundColor: c.bg }} />;
 
   const icon = page.format.icon ? resolveIcon(page.format.icon) : null;
+  const share = lumen.account.available ? [{ text: "Share", onPress: () => router.push(`/share/${page.id}`) }] : [];
   const menu = () =>
-    Alert.alert(pageTitle(page), undefined, [
+    Alert.alert(pageTitle(page), readOnly ? "You can view this page, not change it." : undefined, readOnly ? [...share, { text: "Close", style: "cancel" }] : [
+      ...share,
       {
         text: "Add sub-page",
         onPress: async () => {
@@ -64,10 +80,17 @@ export default function PageScreen() {
 
   const t = c.tokens;
   return (
-    <View style={{ flex: 1, backgroundColor: c.bg }}>
+    <View style={{ flex: 1, backgroundColor: glass ? c.tokens.skyBottom : c.bg }}>
+      {glass ? (
+        <View style={StyleSheet.absoluteFill} pointerEvents="none">
+          <SkyCard height={height} bodyTop={headerHeight + 70} />
+        </View>
+      ) : null}
       <Stack.Screen
         options={{
           title: "",
+          headerTransparent: glass,
+          headerStyle: { backgroundColor: glass ? "transparent" : c.bg },
           headerRight: () => (
             <Pressable onPress={menu} hitSlop={10} style={styles.headerButton} accessibilityLabel="Page actions">
               <Icon name="ellipsis" size={22} color={c.text} />
@@ -83,13 +106,16 @@ export default function PageScreen() {
       )}
       <PageEditor
         ref={editor}
-        dom={{ style: { flex: 1 }, containerStyle: { flex: 1 } }}
+        dom={{ style: { flex: 1, backgroundColor: "transparent" }, containerStyle: { flex: 1, marginTop: glass ? headerHeight : 0, backgroundColor: "transparent" } }}
         title={initial.title}
         icon={icon ? { name: icon.name, ...(iconColor(icon.color, c.dark) ? { color: iconColor(icon.color, c.dark)! } : {}) } : null}
         initialContent={initial.content}
+        editable={!readOnly}
+        remote={remote}
         dark={c.dark}
         colors={{
-          bg: c.bg,
+          // Over the sky the page is frosted glass, so the weather shows through while writing.
+          bg: glass ? t.glass : c.bg,
           surface: t.surface,
           text: t.text,
           muted: t.muted,
