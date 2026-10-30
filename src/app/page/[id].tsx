@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, FlatList, Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { FlatList, Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { Stack, router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { PartialBlock } from "@blocknote/core";
 import { pageTitle } from "@lumen/shared/client";
 import { isEditorBlock, toEditorBlock } from "@lumen/shared/editor";
 import { ICON_COLORS, PAGE_ICON_NAMES, iconColor, resolveIcon, type IconColor } from "@lumen/shared/icons";
-import type { Block } from "@lumen/shared/schema/client";
+import type { Block, Space } from "@lumen/shared/schema/client";
 import type { PageSession, RemoteUpdate } from "@lumen/shared/client";
 import { lumen } from "../../db/lumen";
 import { useLive } from "../../data/hooks";
@@ -14,7 +14,9 @@ import PageEditor, { type PageEditorRef } from "../../components/PageEditor";
 import { SkyCard } from "../../ambient/SkyCard";
 import { useAmbient } from "../../ambient/AmbientProvider";
 import { Icon } from "../../components/Icon";
+import { ChoiceSheet, type Choice } from "../../components/Sheets";
 import { useColors } from "../../theme";
+import { misspelled, onSpellChange, suggest } from "../../lib/spell";
 
 export default function PageScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -22,6 +24,10 @@ export default function PageScreen() {
   const editor = useRef<PageEditorRef>(null);
   const page = useLive(() => lumen.getBlock(id), [id]);
   const [picking, setPicking] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  // Bumped when the dictionary changes, so the open editor checks its words again.
+  const [dictionaryVersion, setDictionaryVersion] = useState(0);
+  useEffect(() => onSpellChange(() => setDictionaryVersion((v) => v + 1)), []);
   const readOnly = useLive(() => lumen.roleOf(id), [id]) === "viewer";
   const { settings } = useAmbient();
   const glass = settings.skyBehindPage;
@@ -60,23 +66,25 @@ export default function PageScreen() {
   if (!page || !initial) return <View style={{ flex: 1, backgroundColor: c.bg }} />;
 
   const icon = page.format.icon ? resolveIcon(page.format.icon) : null;
-  const share = lumen.account.available ? [{ text: "Share", onPress: () => router.push(`/share/${page.id}`) }] : [];
-  const menu = () =>
-    Alert.alert(pageTitle(page), readOnly ? "You can view this page, not change it." : undefined, readOnly ? [...share, { text: "Close", style: "cancel" }] : [
-      ...share,
-      {
-        text: "Add sub-page",
-        onPress: async () => {
-          const space = await lumen.getSpace();
-          if (space) router.push(`/page/${await lumen.createPage(space, page.id)}`);
-        },
-      },
-      { text: "Change icon", onPress: () => setPicking(true) },
-      page.alive
-        ? { text: "Move to trash", style: "destructive", onPress: () => lumen.setPageAlive(page.id, false).then(() => router.back()) }
-        : { text: "Restore", onPress: () => lumen.setPageAlive(page.id, true) },
-      { text: "Cancel", style: "cancel" },
-    ]);
+  const menu = (): Choice[] => [
+    ...(lumen.account.available ? [{ label: "Share", icon: "users" as const, onPress: () => router.push(`/share/${page.id}`) }] : []),
+    ...(readOnly
+      ? []
+      : [
+          {
+            label: "Add sub-page",
+            icon: "plus" as const,
+            onPress: async () => {
+              // A page inside a shared page belongs to that page's workspace.
+              router.push(`/page/${await lumen.createPage({ id: page.space_id } as Space, page.id)}`);
+            },
+          },
+          { label: "Change icon", icon: "face-slightly-smiling" as const, onPress: () => setPicking(true) },
+          page.alive
+            ? { label: "Move to trash", icon: "trash" as const, danger: true, onPress: () => void lumen.setPageAlive(page.id, false).then(() => router.back()) }
+            : { label: "Restore", icon: "archive-restore" as const, onPress: () => void lumen.setPageAlive(page.id, true) },
+        ]),
+  ];
 
   const t = c.tokens;
   return (
@@ -92,7 +100,7 @@ export default function PageScreen() {
           headerTransparent: glass,
           headerStyle: { backgroundColor: glass ? "transparent" : c.bg },
           headerRight: () => (
-            <Pressable onPress={menu} hitSlop={10} style={styles.headerButton} accessibilityLabel="Page actions">
+            <Pressable onPress={() => setMenuOpen(true)} hitSlop={10} style={styles.headerButton} accessibilityLabel="Page actions">
               <Icon name="ellipsis" size={22} color={c.text} />
             </Pressable>
           ),
@@ -128,11 +136,18 @@ export default function PageScreen() {
           accentText: t.accentText,
           selection: t.selection,
           shadow: t.shadow,
+          danger: t.danger,
         }}
+        spellcheck={settings.spellcheck}
+        dictionaryVersion={dictionaryVersion}
+        onCheckWords={misspelled}
+        onSuggest={suggest}
+        onAddWord={(word) => lumen.dictionary.add(word)}
         onSave={(doc) => session!.save(doc)}
         onRename={(title) => lumen.renamePage(id, title)}
         onIconPress={async () => setPicking(true)}
       />
+      <ChoiceSheet title={menuOpen ? (readOnly ? `${pageTitle(page)} · view only` : pageTitle(page)) : undefined} choices={menu()} onClose={() => setMenuOpen(false)} />
       <IconSheet
         visible={picking}
         current={icon}

@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Alert, AppState, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
+import * as Application from "expo-application";
+import type { ReleaseNote } from "@lumen/shared/client";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { canEdit } from "@lumen/shared";
 import { isGroup, pageTitle, type PageNode } from "@lumen/shared/client";
@@ -17,6 +19,7 @@ import { weatherIcon } from "../ambient/weatherIcon";
 import { useAmbient } from "../ambient/AmbientProvider";
 import { FONTS, useColors } from "../theme";
 import { updates, useUpdate } from "../lib/updates";
+import { useInbox } from "../lib/notifications";
 
 interface Row {
   node: PageNode;
@@ -96,6 +99,7 @@ function SkyHeader() {
         <Text style={[styles.brand, { color: ink }]}>Lumen</Text>
         <View style={{ flexDirection: "row", gap: 8 }}>
           <RoundButton icon="search" ink={ink} onPress={() => router.push("/search")} label="Search" />
+          {lumen.account.current ? <InboxButton ink={ink} /> : null}
           {role === "viewer" ? null : <RoundButton icon="plus" ink={ink} onPress={() => newPage(null)} label="New page" />}
           <RoundButton icon="settings" ink={ink} onPress={() => router.push("/settings")} label="Settings" />
         </View>
@@ -186,6 +190,69 @@ function UpdateCard() {
   );
 }
 
+function InboxButton({ ink }: { ink: string }) {
+  const c = useColors();
+  const { unread } = useInbox();
+  return (
+    <View>
+      <RoundButton icon="bell" ink={ink} onPress={() => router.push("/inbox")} label={unread ? `Notifications, ${unread} new` : "Notifications"} />
+      {unread ? (
+        <View pointerEvents="none" style={[styles.badge, { backgroundColor: c.accent }]}>
+          <Text style={{ color: c.accentText, fontSize: 11, fontWeight: "700" }}>{unread > 9 ? "9+" : unread}</Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+/** After an update: what changed, until it's dismissed (or two weeks pass). */
+function WhatsNewCard() {
+  const c = useColors();
+  const [note, setNote] = useState<ReleaseNote>();
+  const [open, setOpen] = useState(false);
+  const version = Application.nativeApplicationVersion ?? "";
+  useEffect(() => {
+    if (version) lumen.whatsNew(version).then(setNote, () => {});
+  }, [version]);
+  if (!note) return null;
+  return (
+    <View style={[styles.card, { backgroundColor: c.accentSoft }]}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+        <Icon name="party-popper" size={17} color={c.accent} />
+        <Text style={{ color: c.text, fontSize: 15, fontWeight: "600" }}>New in Lumen {version}</Text>
+      </View>
+      <Text style={{ color: c.muted, fontSize: 13.5, lineHeight: 19, marginTop: 4 }}>{note.title}</Text>
+      {open
+        ? note.items.map((i) => (
+            <View key={i.title} style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
+              <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: c.accent, marginTop: 7 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: c.text, fontSize: 14.5, fontWeight: "600" }}>{i.title}</Text>
+                <Text style={{ color: c.muted, fontSize: 13.5, lineHeight: 19 }}>{i.body}</Text>
+              </View>
+            </View>
+          ))
+        : null}
+      <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
+        {open ? null : (
+          <Pressable onPress={() => setOpen(true)} style={[styles.cardButton, { backgroundColor: c.accent }]}>
+            <Text style={{ color: c.accentText, fontWeight: "600" }}>See what's new</Text>
+          </Pressable>
+        )}
+        <Pressable
+          onPress={() => {
+            void lumen.dismissWhatsNew(version);
+            setNote(undefined);
+          }}
+          style={[styles.cardButton, open ? { backgroundColor: c.accent } : null]}
+        >
+          <Text style={open ? { color: c.accentText, fontWeight: "600" } : { color: c.muted }}>Got it</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
 function RoundButton({ icon, ink, onPress, label }: { icon: IconName; ink: string; onPress: () => void; label: string }) {
   return (
     <Pressable onPress={onPress} hitSlop={6} accessibilityLabel={label} style={({ pressed }) => [styles.round, { backgroundColor: pressed ? "rgba(0,0,0,0.28)" : "rgba(0,0,0,0.16)" }]}>
@@ -214,6 +281,7 @@ export default function Home() {
       })),
     };
   }, [picked]);
+  useFocusEffect(useCallback(() => setPicked((n) => n + 1), []));
   const tree = data?.tree;
   const trashCount = useLive(async () => (await lumen.trashedPages()).length, []) ?? 0;
   const [open, setOpen] = useState<Set<string>>(new Set());
@@ -293,6 +361,7 @@ export default function Home() {
           contentContainerStyle={{ paddingHorizontal: 8, paddingTop: 10, paddingBottom: 40 }}
           ListHeaderComponent={
             <>
+              <WhatsNewCard />
               <UpdateCard />
               <AccountCard />
               {data && data.spaces.length > 1 && data.space ? (
@@ -387,5 +456,6 @@ const styles = StyleSheet.create({
   spaceRow: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingTop: 6 },
   card: { borderRadius: 18, padding: 14, marginHorizontal: 4, marginBottom: 8 },
   cardButton: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 12 },
+  badge: { position: "absolute", top: -2, right: -2, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 4, alignItems: "center", justifyContent: "center" },
   trash: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 14, paddingVertical: 14, marginTop: 10, borderRadius: 14 },
 });

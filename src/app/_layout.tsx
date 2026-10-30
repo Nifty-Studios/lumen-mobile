@@ -123,7 +123,10 @@ function ThemedStack() {
         <Stack.Screen name="trash" options={{ title: "Trash" }} />
         <Stack.Screen name="settings" options={{ title: "Settings" }} />
         <Stack.Screen name="signin" options={{ headerShown: false, animation: "fade" }} />
-        <Stack.Screen name="share/[id]" options={{ title: "Share", presentation: "modal" }} />
+        <Stack.Screen name="share/[id]" options={{ title: "Share" }} />
+        <Stack.Screen name="inbox" options={{ title: "Notifications" }} />
+        <Stack.Screen name="friends" options={{ title: "Friends" }} />
+        <Stack.Screen name="dictionary" options={{ title: "Dictionary" }} />
       </Stack>
     </>
   );

@@ -12,7 +12,18 @@ import { en } from "@blocknote/core/locales";
 import type { Block as EditorBlock, PartialBlock } from "@blocknote/core";
 import type { RemoteUpdate } from "@lumen/shared/client";
 import { useDOMImperativeHandle, type DOMImperativeFactory, type DOMProps } from "expo/dom";
-import { applyRemoteUpdate, filterSlashItems, lumenSchema, slashItems, snapshot, type SlashItem, type Snapshot } from "@lumen/shared/editor/blocknote";
+import {
+  applyRemoteUpdate,
+  attachSpellcheck,
+  filterSlashItems,
+  lumenSchema,
+  slashItems,
+  snapshot,
+  type Misspelling,
+  type SlashItem,
+  type Snapshot,
+  type SpellcheckHandle,
+} from "@lumen/shared/editor/blocknote";
 import { iconSvg, type IconName } from "@lumen/shared/icons";
 import { EDITOR_FONT_CSS } from "./editorFonts";
 
@@ -38,6 +49,7 @@ export interface EditorColors {
   accentText: string;
   selection: string;
   shadow: string;
+  danger: string;
 }
 
 interface Props {
@@ -55,6 +67,13 @@ interface Props {
   onSave: (doc: EditorBlock[]) => Promise<void>;
   onRename: (title: string) => Promise<void>;
   onIconPress: () => Promise<void>;
+  /** Underline misspelled words (the checker runs on the native side). */
+  spellcheck: boolean;
+  /** Grows when the dictionary changes, so words are checked again. */
+  dictionaryVersion: number;
+  onCheckWords: (words: string[]) => Promise<string[]>;
+  onSuggest: (word: string) => Promise<string[]>;
+  onAddWord: (word: string) => Promise<void>;
 }
 
 const svg = (name: string, size: number, color = "currentColor") => ({ __html: iconSvg(name as IconName, { size, color }) });
@@ -69,13 +88,17 @@ async function imageToDataUrl(file: File): Promise<string> {
   return canvas.toDataURL(file.type === "image/png" ? "image/png" : "image/webp", 0.85);
 }
 
-export default function PageEditor({ ref, title, icon, initialContent, editable, remote, dark, colors, onSave, onRename, onIconPress }: Props) {
+export default function PageEditor(props: Props) {
+  const { ref, title, icon, initialContent, editable, remote, dark, colors, onSave, onRename, onIconPress } = props;
+  const { spellcheck, dictionaryVersion, onCheckWords, onSuggest, onAddWord } = props;
   const editor = useCreateBlockNote(
     {
       schema: lumenSchema,
       initialContent: (initialContent ?? undefined) as never,
       uploadFile: imageToDataUrl,
       dictionary: { ...en, placeholders: { ...en.placeholders, default: "Write, or type / for blocks", emptyDocument: "Start writing, or type / for blocks" } },
+      // Lumen draws its own squiggles (with the person's dictionary), so the keyboard's are off.
+      domAttributes: { editor: { spellcheck: "false" } },
     },
     [],
   );
@@ -85,6 +108,23 @@ export default function PageEditor({ ref, title, icon, initialContent, editable,
   const known = useRef<Snapshot | undefined>(undefined);
   const applyingRemote = useRef(false);
   const [remoteTitle, setRemoteTitle] = useState<string>();
+  const spell = useRef<SpellcheckHandle>(undefined);
+  const [misspelling, setMisspelling] = useState<Misspelling>();
+
+  useEffect(() => {
+    if (!spellcheck || !editable) return;
+    const handle = attachSpellcheck({ root: () => editor.domElement, view: () => editor.prosemirrorView, check: onCheckWords, delay: 600 });
+    spell.current = handle;
+    handle.invalidate();
+    return () => {
+      handle.destroy();
+      spell.current = undefined;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spellcheck, editable]);
+  useEffect(() => {
+    if (dictionaryVersion) spell.current?.invalidate();
+  }, [dictionaryVersion]);
 
   const flush = () => {
     clearTimeout(timer.current);
@@ -103,6 +143,7 @@ export default function PageEditor({ ref, title, icon, initialContent, editable,
     } finally {
       applyingRemote.current = false;
     }
+    spell.current?.changed();
     setRemoteTitle(remote.update.title);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [remote?.seq]);
@@ -140,6 +181,7 @@ export default function PageEditor({ ref, title, icon, initialContent, editable,
     "--accent-text": colors.accentText,
     "--selection": colors.selection,
     "--shadow": colors.shadow,
+    "--danger": colors.danger,
   };
   const rootVars = `:root{${Object.entries(vars)
     .map(([k, v]) => `${k}:${v}`)
@@ -160,6 +202,7 @@ export default function PageEditor({ ref, title, icon, initialContent, editable,
         <span dangerouslySetInnerHTML={svg(icon?.name ?? "file-text", 28, icon?.color ?? colors.muted)} />
       </button>
       <Title initial={title} remote={remoteTitle} readOnly={!editable} onRename={onRename} onEnter={() => editor.focus()} />
+      <div className="editor-wrap" onClick={(e) => setMisspelling(spell.current?.at(e.clientX, e.clientY))}>
       <BlockNoteView
         editor={editor}
         editable={editable}
@@ -168,6 +211,7 @@ export default function PageEditor({ ref, title, icon, initialContent, editable,
         emojiPicker={false}
         onChange={() => {
           if (applyingRemote.current) return;
+          spell.current?.changed();
           dirty.current = true;
           clearTimeout(timer.current);
           timer.current = setTimeout(flush, SAVE_DELAY);
@@ -180,6 +224,7 @@ export default function PageEditor({ ref, title, icon, initialContent, editable,
           onItemClick={(item) => item.onItemClick()}
         />
       </BlockNoteView>
+      </div>
       <div
         className="filler"
         onPointerDown={(e) => {
@@ -187,6 +232,74 @@ export default function PageEditor({ ref, title, icon, initialContent, editable,
           focusEnd();
         }}
       />
+      {misspelling && (
+        <SpellPopup
+          misspelling={misspelling}
+          suggest={onSuggest}
+          onPick={(text) => {
+            spell.current?.replace(misspelling, text);
+            setMisspelling(undefined);
+          }}
+          onAdd={() => {
+            void onAddWord(misspelling.word);
+            setMisspelling(undefined);
+          }}
+          onClose={() => setMisspelling(undefined)}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Corrections for a tapped misspelled word, floating next to it. Taps act on touchend (see SlashMenu). */
+function SpellPopup(props: { misspelling: Misspelling; suggest: (w: string) => Promise<string[]>; onPick: (t: string) => void; onAdd: () => void; onClose: () => void }) {
+  const { misspelling, suggest, onPick, onAdd, onClose } = props;
+  const [items, setItems] = useState<string[]>();
+  const box = useRef<HTMLDivElement>(null);
+  const [top, setTop] = useState<number>();
+  const { word, rect } = misspelling;
+  useEffect(() => {
+    let alive = true;
+    suggest(word).then(
+      (s) => alive && setItems(s),
+      () => alive && setItems([]),
+    );
+    return () => {
+      alive = false;
+    };
+  }, [word, suggest]);
+  useEffect(() => {
+    const h = box.current?.offsetHeight ?? 0;
+    setTop(rect.top - h - 10 > 8 ? rect.top - h - 10 + scrollY : rect.bottom + 10 + scrollY);
+  }, [rect, items]);
+  useEffect(() => {
+    const away = (e: Event) => {
+      if (!box.current?.contains(e.target as Node)) onClose();
+    };
+    document.addEventListener("pointerdown", away, true);
+    return () => document.removeEventListener("pointerdown", away, true);
+  }, [onClose]);
+  const tap = (fn: () => void) => ({
+    onTouchEnd: (e: React.TouchEvent) => {
+      e.preventDefault();
+      fn();
+    },
+    onClick: fn,
+  });
+  return (
+    <div ref={box} className="spell" style={{ top: top ?? -9999 }} onPointerDown={(e) => e.preventDefault()}>
+      <div className="spell-row">
+        {!items && <span className="spell-note">Looking…</span>}
+        {items?.length === 0 && <span className="spell-note">No suggestions</span>}
+        {items?.map((s) => (
+          <button key={s} className="spell-chip" {...tap(() => onPick(s))}>
+            {s}
+          </button>
+        ))}
+      </div>
+      <button className="spell-add" {...tap(onAdd)}>
+        <span dangerouslySetInnerHTML={svg("book-a", 16)} /> Add “{word}” to dictionary
+      </button>
     </div>
   );
 }
@@ -356,4 +469,12 @@ const css = EDITOR_FONT_CSS + `
   .slash-title { display: block; font-size: 14px; }
   .slash-sub { display: block; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .slash-key { font: 11px ui-monospace, monospace; color: var(--faint); }
+  ::highlight(lumen-misspelled) { text-decoration: underline wavy var(--danger); text-decoration-thickness: 1.5px; text-underline-offset: 3px; }
+  .spell { position: absolute; left: 12px; right: 12px; z-index: 30; padding: 8px; border-radius: 18px; background: var(--surface);
+    -webkit-backdrop-filter: blur(24px) saturate(1.3); backdrop-filter: blur(24px) saturate(1.3);
+    color: var(--text); box-shadow: 0 24px 60px -18px var(--shadow), 0 4px 14px -6px var(--shadow); font-family: system-ui, Roboto, sans-serif; }
+  .spell-row { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 2px 6px; }
+  .spell-note { padding: 6px 8px; font-size: 13px; color: var(--muted); }
+  .spell-chip { padding: 8px 14px; border: 0; border-radius: 12px; background: var(--hover); color: var(--text); font: 600 14.5px system-ui, Roboto, sans-serif; }
+  .spell-add { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px; border: 0; border-radius: 12px; background: transparent; color: var(--muted); font: 14px system-ui, Roboto, sans-serif; text-align: left; }
 `;

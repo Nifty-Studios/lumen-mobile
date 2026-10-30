@@ -46,13 +46,15 @@ export function NoticeBanner() {
     <Animated.View style={[styles.wrap, { top: insets.top + 8, transform: [{ translateY: y }] }]}>
       <Pressable
         onPress={() => {
-          if (notice.pageId) router.push(`/page/${notice.pageId}`);
+          if (notice.notificationId) void lumen.inbox.markRead([notice.notificationId]);
+          if (notice.kind === "friend_request" || notice.kind === "friend_accepted") router.push("/friends");
+          else if (notice.pageId) router.push(`/page/${notice.pageId}`);
           setNotice(undefined);
         }}
         style={[styles.card, { backgroundColor: c.surface }]}
       >
         <View style={[styles.icon, { backgroundColor: c.accentSoft }]}>
-          <Icon name="users" size={18} color={c.accent} />
+          <Icon name={notice.kind === "friend_request" || notice.kind === "friend_accepted" ? "user-plus" : "users"} size={18} color={c.accent} />
         </View>
         <View style={{ flex: 1 }}>
           <Text style={{ color: c.text, fontSize: 15, fontWeight: "600" }}>{notice.title}</Text>

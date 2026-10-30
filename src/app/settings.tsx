@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ActivityIndicator, Pressable, ScrollView, Share, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { ENV_TIMES, ENV_WEATHERS, MOODS, computeSky, searchPlaces, themeFor, type Mood, type Place } from "@lumen/shared/ambient";
+import { ACCENT_PRESETS, ENV_TIMES, ENV_WEATHERS, MOODS, computeSky, isHexColor, searchPlaces, themeFor, type Mood, type Place } from "@lumen/shared/ambient";
+import * as Application from "expo-application";
 import type { IconName } from "@lumen/shared/icons";
 import type { ImportSummary } from "@lumen/shared/client";
 import { router } from "expo-router";
@@ -18,13 +19,14 @@ export default function Settings() {
   return (
     <ScrollView style={{ flex: 1, backgroundColor: c.bg }} contentContainerStyle={{ padding: 16, paddingBottom: 48 }} keyboardShouldPersistTaps="handled">
       <Account />
+      <People />
       <AiConnection />
       <Appearance />
       <Environment />
       <Location />
       <Data />
       <Text style={{ color: c.faint, fontSize: 12, textAlign: "center", marginTop: 18 }}>
-        Lumen 0.1.0 · {lumen.account.current ? "Syncing" : "Notes stay on this phone"} · Icons by Lucide
+        Lumen {Application.nativeApplicationVersion ?? ""} · {lumen.account.current ? "Syncing" : "Notes stay on this phone"} · Icons by Lucide
       </Text>
     </ScrollView>
   );
@@ -111,6 +113,32 @@ function Account() {
   );
 }
 
+/** Friends and the dictionary each get their own screen. */
+function People() {
+  const c = useColors();
+  const { user } = useAccount();
+  const [words, setWords] = useState(lumen.dictionary.words().length);
+  useEffect(() => lumen.dictionary.onChange((w) => setWords(w.length)), []);
+  const link = (icon: IconName, label: string, note: string, onPress: () => void) => (
+    <Pressable onPress={onPress} android_ripple={{ color: c.hover }} style={[styles.card, { backgroundColor: c.hover, marginBottom: 10 }]}>
+      <View style={[styles.tile, { backgroundColor: c.accentSoft }]}>
+        <Icon name={icon} size={20} color={c.accent} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={{ color: c.text, fontSize: 15 }}>{label}</Text>
+        <Text style={{ color: c.muted, fontSize: 12.5 }}>{note}</Text>
+      </View>
+      <Icon name="chevron-right" size={18} color={c.faint} />
+    </Pressable>
+  );
+  return (
+    <View style={{ marginBottom: 26 }}>
+      {user ? link("users", "Friends", "Share with them in one tap", () => router.push("/friends")) : null}
+      {link("spell-check", "Dictionary", words ? `${words} word${words === 1 ? "" : "s"} the spellchecker accepts` : "Words the spellchecker accepts", () => router.push("/dictionary"))}
+    </View>
+  );
+}
+
 function AiConnection() {
   const c = useColors();
   const { user } = useAccount();
@@ -161,6 +189,7 @@ function Appearance() {
   const { settings, update } = useAmbient();
   return (
     <Section title="Appearance" note="Lumen shifts with the time of day.">
+      <AccentPicker />
       <Label>Theme</Label>
       <Chips
         value={settings.theme}
@@ -178,6 +207,27 @@ function Appearance() {
         </View>
         <Switch value={settings.skyBehindPage} onValueChange={(skyBehindPage) => update({ skyBehindPage })} trackColor={{ true: c.accent, false: c.active }} thumbColor="#fff" />
       </View>
+      <View style={styles.toggleRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={{ color: c.text, fontSize: 15 }}>Spellcheck</Text>
+          <Text style={{ color: c.muted, fontSize: 13, lineHeight: 18, marginTop: 2 }}>Underline misspelled words. Tap one for corrections.</Text>
+        </View>
+        <Switch value={settings.spellcheck} onValueChange={(spellcheck) => update({ spellcheck })} trackColor={{ true: c.accent, false: c.active }} thumbColor="#fff" />
+      </View>
+      {settings.spellcheck ? (
+        <>
+          <Label>Spelling</Label>
+          <Chips
+            value={settings.spelling}
+            onChange={(spelling) => update({ spelling })}
+            options={[
+              { value: "auto", label: "Auto" },
+              { value: "en-GB", label: "British" },
+              { value: "en-US", label: "American" },
+            ]}
+          />
+        </>
+      ) : null}
       <Label>Motion</Label>
       <Chips value={settings.motion} onChange={(motion) => update({ motion })} options={[{ value: "full", label: "Alive" }, { value: "calm", label: "Calm" }, { value: "still", label: "Still" }]} />
       <Label>Clock</Label>
@@ -185,6 +235,65 @@ function Appearance() {
       <Label>Temperature</Label>
       <Chips value={settings.temperatureUnit} onChange={(temperatureUnit) => update({ temperatureUnit })} options={[{ value: "c", label: "°C" }, { value: "f", label: "°F" }]} />
     </Section>
+  );
+}
+
+/** Sky (the accent follows the time of day), a preset, or any hex color. */
+function AccentPicker() {
+  const c = useColors();
+  const { settings, update } = useAmbient();
+  const custom = settings.accent && !ACCENT_PRESETS.some((p) => p.color === settings.accent) ? settings.accent : null;
+  const [hex, setHex] = useState(custom ?? "");
+  const [editing, setEditing] = useState(!!custom);
+  const dot = (key: string, active: boolean, color: string | null, onPress: () => void) => (
+    <Pressable key={key} onPress={onPress} accessibilityLabel={key} style={[styles.swatch, { transform: [{ scale: active ? 1.12 : 1 }] }]}>
+      {color ? (
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: color, borderRadius: 19 }]} />
+      ) : (
+        <LinearGradient colors={["#f08fb0", "#6cb2ff", "#f2aa5c", "#a99cff"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[StyleSheet.absoluteFill, { borderRadius: 19 }]} />
+      )}
+      {active ? <Icon name="check" size={16} strokeWidth={2.6} color="#fff" /> : null}
+    </Pressable>
+  );
+  return (
+    <View>
+      <Label>Accent color</Label>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
+        {dot("Sky", !settings.accent, null, () => {
+          setEditing(false);
+          void update({ accent: null });
+        })}
+        {ACCENT_PRESETS.map((p) =>
+          dot(p.name, settings.accent === p.color, p.color, () => {
+            setEditing(false);
+            void update({ accent: p.color });
+          }),
+        )}
+        <Pressable onPress={() => setEditing(true)} accessibilityLabel="Custom color" style={[styles.swatch, { backgroundColor: custom ?? c.hover, transform: [{ scale: custom ? 1.12 : 1 }] }]}>
+          <Icon name={custom ? "check" : "pipette"} size={16} strokeWidth={custom ? 2.6 : 2} color={custom ? "#fff" : c.muted} />
+        </Pressable>
+      </View>
+      <Text style={{ color: c.muted, fontSize: 12.5, marginTop: 8 }}>“Sky” changes with the time of day.</Text>
+      {editing ? (
+        <View style={[styles.search, { backgroundColor: c.hover }]}>
+          <View style={{ width: 18, height: 18, borderRadius: 9, backgroundColor: isHexColor(hex) ? hex : c.active }} />
+          <TextInput
+            value={hex}
+            onChangeText={(t) => {
+              const v = t.startsWith("#") ? t : `#${t}`;
+              setHex(v);
+              if (isHexColor(v)) void update({ accent: v.toLowerCase() });
+            }}
+            placeholder="#2f7bd6"
+            placeholderTextColor={c.faint}
+            autoCapitalize="none"
+            autoCorrect={false}
+            maxLength={7}
+            style={{ flex: 1, color: c.text, fontSize: 15, paddingVertical: 11 }}
+          />
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -386,6 +495,7 @@ function Data() {
 
 const styles = StyleSheet.create({
   toggleRow: { flexDirection: "row", alignItems: "center", gap: 12, marginTop: 16 },
+  swatch: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center" },
   accountCard: { flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 18, padding: 14 },
   avatar: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
   chip: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 14 },
