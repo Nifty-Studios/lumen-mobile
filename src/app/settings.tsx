@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { CELEBRATIONS, CELEBRATION_IDS } from "@lumen/shared/calendar";
+import { birthdayLabel, pickBirthday } from "../components/Birthday";
 import { ActivityIndicator, Pressable, ScrollView, Share, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { ACCENT_PRESETS, ENV_TIMES, ENV_WEATHERS, MOODS, computeSky, isHexColor, searchPlaces, themeFor, type Mood, type Place } from "@lumen/shared/ambient";
@@ -22,6 +24,7 @@ export default function Settings() {
       <People />
       <AiConnection />
       <Appearance />
+      <CalendarSection />
       <Environment />
       <Location />
       <Data />
@@ -180,6 +183,64 @@ function AiConnection() {
           </Pressable>
         </View>
       ))}
+    </Section>
+  );
+}
+
+function CalendarSection() {
+  const c = useColors();
+  const { settings, update, preview } = useAmbient();
+  const [birthday, setBirthday] = useState(lumen.profile.birthday);
+  useEffect(() => lumen.profile.onChange(() => setBirthday(lumen.profile.birthday())), []);
+  const toggle = (label: string, note: string, value: boolean, onChange: (v: boolean) => void) => (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginTop: 14 }}>
+      <View style={{ flex: 1 }}>
+        <Text style={{ color: c.text, fontSize: 15 }}>{label}</Text>
+        <Text style={{ color: c.muted, fontSize: 13, lineHeight: 18 }}>{note}</Text>
+      </View>
+      <Switch value={value} onValueChange={onChange} trackColor={{ true: c.accent, false: c.active }} thumbColor="#fff" />
+    </View>
+  );
+  return (
+    <Section title="Calendar" note="Your events, the holidays and your birthday, with reminders in the notification bar.">
+      <Label>Your birthday</Label>
+      <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
+        <Pressable
+          onPress={async () => {
+            const b = await pickBirthday(birthday, birthday ? birthday.length === 10 : true);
+            if (b) await lumen.profile.setBirthday(b).catch(() => {});
+          }}
+          style={[styles.chip, { backgroundColor: c.hover }]}
+        >
+          <Icon name="cake" size={15} color={c.muted} />
+          <Text style={{ color: c.text, fontSize: 14 }}>{birthday ? birthdayLabel(birthday) : "Add your birthday"}</Text>
+        </Pressable>
+        {birthday ? (
+          <Pressable onPress={() => void lumen.profile.setBirthday(null)} style={[styles.chip, { backgroundColor: c.hover }]}>
+            <Text style={{ color: c.muted, fontSize: 14 }}>Remove</Text>
+          </Pressable>
+        ) : null}
+      </View>
+      {toggle("Reminders", "Notifications for your events, even with Lumen closed.", settings.reminders, (reminders) => void update({ reminders }))}
+      {toggle("Holidays", "New Year, Valentine's Day, Easter, Halloween and Christmas.", settings.holidays, (holidays) => void update({ holidays }))}
+      {toggle("Good morning notes", "A notification on the morning of a holiday or your birthday.", settings.holidayAlerts, (holidayAlerts) => void update({ holidayAlerts }))}
+      {toggle("Celebrations in the sky", "Fireworks, hearts, snow and lights, confetti on special days.", settings.celebrations, (celebrations) => void update({ celebrations }))}
+      <Label>Preview a celebration</Label>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+        {CELEBRATION_IDS.map((id) => (
+          <Pressable
+            key={id}
+            onPress={() => {
+              preview(id);
+              router.dismissTo("/");
+            }}
+            style={[styles.chip, { backgroundColor: c.hover }]}
+          >
+            <Icon name={CELEBRATIONS[id].icon} size={15} color={c.muted} />
+            <Text style={{ color: c.text, fontSize: 14 }}>{CELEBRATIONS[id].name}</Text>
+          </Pressable>
+        ))}
+      </View>
     </Section>
   );
 }

@@ -4,6 +4,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { AppState, useColorScheme } from "react-native";
 import { computeSky, themeFor, type LumenSettings, type SavedLocation, type SkyState, type ThemeTokens, type Weather } from "@lumen/shared/ambient";
+import { CELEBRATIONS, type ActiveCelebration, type CelebrationId } from "@lumen/shared/calendar";
 import { lumen } from "../db/lumen";
 import { deviceLocation, placeName, timezonePlace, UNNAMED } from "../lib/location";
 
@@ -16,6 +17,9 @@ interface Ambient {
   locateDevice: () => Promise<SavedLocation>;
   setLocation: (loc: SavedLocation) => Promise<void>;
   refreshWeather: () => Promise<void>;
+  /** Today's special day (or the one being previewed), if any. */
+  celebration: ActiveCelebration | undefined;
+  preview: (id: CelebrationId | null) => void;
 }
 
 const AmbientContext = createContext<Ambient | null>(null);
@@ -108,6 +112,30 @@ export function AmbientProvider({ children }: { children: ReactNode }) {
     };
   }, [settings.location, settings.liveWeather]);
 
+  const [today, setToday] = useState<ActiveCelebration>();
+  const [previewing, setPreviewing] = useState<CelebrationId | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const check = () => lumen.calendar.celebration().then((c) => alive && setToday((cur) => (cur?.event.id === c?.event.id && cur?.greeting === c?.greeting ? cur : c)), () => {});
+    check();
+    const offData = lumen.onChange(check);
+    const offProfile = lumen.profile.onChange(check);
+    return () => {
+      alive = false;
+      offData();
+      offProfile();
+    };
+  }, [now, settings.celebrations, settings.holidays]);
+  useEffect(() => {
+    if (!previewing) return;
+    const t = setTimeout(() => setPreviewing(null), 20_000);
+    return () => clearTimeout(t);
+  }, [previewing]);
+  const celebration = useMemo<ActiveCelebration | undefined>(
+    () => (previewing ? { celebration: CELEBRATIONS[previewing], greeting: CELEBRATIONS[previewing].name, event: { id: "preview" } as ActiveCelebration["event"] } : today),
+    [previewing, today],
+  );
+
   const sky = useMemo(
     () =>
       computeSky({
@@ -119,11 +147,11 @@ export function AmbientProvider({ children }: { children: ReactNode }) {
       }),
     [now, settings.location, settings.liveWeather, settings.envTime, settings.envWeather, weather],
   );
-  const theme = useMemo(() => themeFor(sky, dark, settings.accent), [sky, dark, settings.accent]);
+  const theme = useMemo(() => themeFor(sky, dark, settings.accent, celebration?.celebration), [sky, dark, settings.accent, celebration]);
 
   const value = useMemo(
-    () => ({ settings, update, sky, theme, weather, locateDevice, setLocation, refreshWeather }),
-    [settings, update, sky, theme, weather, locateDevice, setLocation, refreshWeather],
+    () => ({ settings, update, sky, theme, weather, locateDevice, setLocation, refreshWeather, celebration, preview: setPreviewing }),
+    [settings, update, sky, theme, weather, locateDevice, setLocation, refreshWeather, celebration],
   );
   return <AmbientContext.Provider value={value}>{children}</AmbientContext.Provider>;
 }

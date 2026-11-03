@@ -8,6 +8,9 @@ import { AmbientProvider } from "../ambient/AmbientProvider";
 import { AuthScreen } from "../components/AuthScreen";
 import { NoticeBanner, playChime } from "../components/NoticeBanner";
 import { updates } from "../lib/updates";
+import * as Notifications from "expo-notifications";
+import { setStarted, startSystemNotifications, type NotificationData } from "../lib/system-notifications";
+import { openNotificationData } from "../lib/notifications";
 import { LoadingMark, WelcomeVideo } from "../components/Intro";
 import { FONTS, useColors } from "../theme";
 
@@ -17,7 +20,9 @@ export default function RootLayout() {
   const [fonts] = useFonts({ Fraunces_300Light, Fraunces_600SemiBold });
 
   useEffect(() => {
-    lumen.start().then(
+    const starting = lumen.start();
+    setStarted(starting);
+    starting.then(
       ({ needsAuth }) => {
         // First launch on this phone: the welcome animation plays before sign-in.
         if (needsAuth && !lumen.getSettings().welcomed) setWelcome(true);
@@ -53,6 +58,18 @@ export default function RootLayout() {
       closeLive?.();
       sub.remove();
       offAccount();
+    };
+  }, [boot.ready, boot.auth]);
+
+  // The notification bar: notices, scheduled reminders, the background check.
+  useEffect(() => {
+    if (!boot.ready || boot.auth) return;
+    let stop: (() => void) | undefined;
+    let cancelled = false;
+    startSystemNotifications().then((s) => (cancelled ? s() : (stop = s)), console.warn);
+    return () => {
+      cancelled = true;
+      stop?.();
     };
   }, [boot.ready, boot.auth]);
 
@@ -97,11 +114,24 @@ export default function RootLayout() {
         <>
           <ThemedStack />
           <NoticeBanner />
+          <NotificationTaps />
         </>
       )}
     </AmbientProvider>
   );
 }
+
+/** A tap on one of Lumen's notifications (also the one that opened the app). */
+function NotificationTaps() {
+  const last = Notifications.useLastNotificationResponse();
+  useEffect(() => {
+    if (!last || handled.has(last.notification.request.identifier + last.notification.date)) return;
+    handled.add(last.notification.request.identifier + last.notification.date);
+    void openNotificationData(last.notification.request.content.data as NotificationData);
+  }, [last]);
+  return null;
+}
+const handled = new Set<string>();
 
 function ThemedStack() {
   const c = useColors();
@@ -127,6 +157,8 @@ function ThemedStack() {
         <Stack.Screen name="inbox" options={{ title: "Notifications" }} />
         <Stack.Screen name="friends" options={{ title: "Friends" }} />
         <Stack.Screen name="dictionary" options={{ title: "Dictionary" }} />
+        <Stack.Screen name="calendar" options={{ title: "Calendar" }} />
+        <Stack.Screen name="event" options={{ title: "Event", presentation: "modal" }} />
       </Stack>
     </>
   );

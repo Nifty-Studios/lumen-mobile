@@ -20,6 +20,10 @@ import { useAmbient } from "../ambient/AmbientProvider";
 import { FONTS, useColors } from "../theme";
 import { updates, useUpdate } from "../lib/updates";
 import { useInbox } from "../lib/notifications";
+import { addDays, today as todayYmd } from "@lumen/shared/calendar";
+import { StickerBadge, formatHm } from "../components/Sticker";
+import { BirthdayPrompt } from "../components/Birthday";
+import { useCalendarVersion } from "./calendar";
 
 interface Row {
   node: PageNode;
@@ -79,7 +83,7 @@ function useNow() {
 }
 
 function SkyHeader() {
-  const { sky, theme, settings } = useAmbient();
+  const { sky, theme, settings, celebration } = useAmbient();
   const insets = useSafeAreaInsets();
   const now = useNow();
   const role = useLive(async () => {
@@ -99,6 +103,7 @@ function SkyHeader() {
         <Text style={[styles.brand, { color: ink }]}>Lumen</Text>
         <View style={{ flexDirection: "row", gap: 8 }}>
           <RoundButton icon="search" ink={ink} onPress={() => router.push("/search")} label="Search" />
+          <RoundButton icon="calendar-days" ink={ink} onPress={() => router.push("/calendar")} label="Calendar" />
           {lumen.account.current ? <InboxButton ink={ink} /> : null}
           {role === "viewer" ? null : <RoundButton icon="plus" ink={ink} onPress={() => newPage(null)} label="New page" />}
           <RoundButton icon="settings" ink={ink} onPress={() => router.push("/settings")} label="Settings" />
@@ -111,6 +116,14 @@ function SkyHeader() {
           {period ? <Text style={[styles.period, { color: ink, opacity: 0.7 }]}>{period}</Text> : null}
         </View>
         <Text style={{ color: ink, opacity: 0.75, fontSize: 14 }}>{now.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}</Text>
+        {celebration ? (
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4 }}>
+            <Icon name={celebration.celebration.icon} size={15} color={ink} />
+            <Text style={{ color: ink, fontSize: 14.5, fontWeight: "700" }} numberOfLines={1}>
+              {celebration.greeting}
+            </Text>
+          </View>
+        ) : null}
         <Pressable onPress={() => router.push("/settings")} style={[styles.weather, { backgroundColor: "rgba(0,0,0,0.16)" }]}>
           <Icon name={weatherIcon(sky.precip, sky.storm, sky.fog, sky.clouds, sky.daylight > 0.4)} size={17} color="#fff" />
           <Text numberOfLines={1} style={{ color: "#fff", fontSize: 13.5 }}>
@@ -121,6 +134,43 @@ function SkyHeader() {
       </View>
     </SkyCard>
   );
+}
+
+/** Today and tomorrow at a glance; tap for the calendar. */
+function TodayCard() {
+  const c = useColors();
+  const { settings } = useAmbient();
+  const version = useCalendarVersion();
+  const today = todayYmd();
+  const list = useLive(() => lumen.calendar.between(today, addDays(today, 1)), [today, version]) ?? [];
+  if (!list.length) return null;
+  return (
+    <Pressable onPress={() => router.push("/calendar")} style={[styles.card, { backgroundColor: c.hover }]}>
+      <Text style={{ color: c.faint, fontSize: 11, letterSpacing: 1.5, fontWeight: "600", marginBottom: 6 }}>COMING UP</Text>
+      {list.slice(0, 4).map((o) => (
+        <View key={o.event.id + o.date} style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 4 }}>
+          <StickerBadge sticker={o.event.sticker} size={26} />
+          <Text style={{ color: c.text, fontSize: 15, flex: 1 }} numberOfLines={1}>
+            {o.event.title || "Untitled"}
+          </Text>
+          <Text style={{ color: c.faint, fontSize: 13 }}>
+            {o.date === today ? "Today" : "Tomorrow"}
+            {o.event.time ? ` · ${formatHm(o.event.time, settings.clock)}` : ""}
+          </Text>
+        </View>
+      ))}
+    </Pressable>
+  );
+}
+
+/** Coming back to Lumen without a birthday on file: ask once (later again after "Not now"). */
+function AskBirthday() {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => lumen.profile.shouldAsk() && setOpen(true), 2500);
+    return () => clearTimeout(t);
+  }, []);
+  return <BirthdayPrompt visible={open} onClose={() => setOpen(false)} />;
 }
 
 /** Signed out: a gentle nudge (now and then, after "Later") to sign in and sync. */
@@ -156,12 +206,15 @@ function UpdateCard() {
   const c = useColors();
   const u = useUpdate();
   if (u.phase === "idle") return null;
-  const title = { available: `Lumen ${u.version} is here`, downloading: `Downloading ${u.version}…`, ready: "Ready to install", error: "The download didn't finish" }[u.phase];
+  const title = { available: `Lumen ${u.version} is here`, downloading: `Downloading ${u.version}…`, ready: "Ready to install", error: u.phase === "error" && u.installFailed ? "Android couldn't install it" : "The download didn't finish" }[u.phase];
   const note = {
     available: "A new version is ready to download.",
     downloading: "You can keep writing.",
     ready: "Tap Install, then confirm on the next screen.",
-    error: "Check your connection and try again.",
+    error:
+      u.phase === "error" && u.installFailed
+        ? "Lumen will download a fresh copy. If it still won't install, this phone has a test build: uninstall Lumen once and install it from the download page (sign in again and your notes come back)."
+        : "Check your connection and try again.",
   }[u.phase];
   const action = u.phase === "available" ? ["Download", updates.download] : u.phase === "ready" ? ["Install", updates.install] : u.phase === "error" ? ["Try again", updates.retry] : null;
   return (
@@ -364,6 +417,7 @@ export default function Home() {
               <WhatsNewCard />
               <UpdateCard />
               <AccountCard />
+              <TodayCard />
               {data && data.spaces.length > 1 && data.space ? (
                 <Pressable
                   onPress={() =>
@@ -433,6 +487,7 @@ export default function Home() {
           }
         />
       </View>
+      <AskBirthday />
       <ChoiceSheet title={sheet?.title} choices={sheet?.choices ?? []} onClose={() => setSheet(undefined)} />
       <NameDialog title={naming?.title} initial={naming?.initial} onSave={(n) => naming?.save(n)} onClose={() => setNaming(undefined)} />
     </View>

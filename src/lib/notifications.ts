@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { router } from "expo-router";
 import type { LumenNotification } from "@lumen/shared";
 import { lumen } from "../db/lumen";
+import type { NotificationData } from "./system-notifications";
 
 export function useInbox() {
   const [, render] = useState(0);
@@ -18,6 +19,23 @@ export function ago(t: number) {
   if (s < 86_400) return `${Math.floor(s / 3600)} h ago`;
   if (s < 7 * 86_400) return `${Math.floor(s / 86_400)} d ago`;
   return new Date(t).toLocaleDateString();
+}
+
+/** Opens what a notification in the bar (or the in-app banner) is about. */
+export async function openNotificationData(data: NotificationData | undefined) {
+  if (!data) return;
+  if (data.kind === "reminder") return router.push({ pathname: "/calendar", params: { date: data.date } });
+  if (data.notificationId) void lumen.inbox.markRead([data.notificationId]);
+  if (data.noticeKind === "friend_request" || data.noticeKind === "friend_accepted") return router.push("/friends");
+  if (data.noticeKind === "space_shared" && data.spaceId) {
+    if (!(await lumen.listSpaces()).some((s) => s.space.id === data.spaceId)) await lumen.connect().catch(() => {});
+    await lumen.setCurrentSpace(data.spaceId);
+    return router.dismissTo("/");
+  }
+  if (data.pageId) {
+    if (!(await lumen.getBlock(data.pageId))) await lumen.connect().catch(() => {});
+    if (await lumen.getBlock(data.pageId)) router.push(`/page/${data.pageId}`);
+  }
 }
 
 /** Opens what a notification is about. Shared a moment ago? Syncs first so it's on the phone. */

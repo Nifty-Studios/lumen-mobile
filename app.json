@@ -3,7 +3,7 @@
     "name": "Lumen",
     "slug": "lumen",
     "scheme": "lumen",
-    "version": "1.2.0",
+    "version": "1.3.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -15,9 +15,12 @@
         "backgroundColor": "#0b0c1a"
       },
       "predictiveBackGestureEnabled": false,
-      "versionCode": 3,
+      "versionCode": 4,
       "permissions": [
-        "android.permission.REQUEST_INSTALL_PACKAGES"
+        "android.permission.REQUEST_INSTALL_PACKAGES",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.SCHEDULE_EXACT_ALARM",
+        "android.permission.RECEIVE_BOOT_COMPLETED"
       ]
     },
     "plugins": [
@@ -33,9 +36,21 @@
           "isAndroidBackgroundLocationEnabled": false
         }
       ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#8ab4ff",
+          "sounds": [
+            "./assets/sounds/notify.wav"
+          ]
+        }
+      ],
       "expo-audio",
       "expo-video",
-      "./plugins/with-release-signing"
+      "./plugins/with-release-signing",
+      "expo-background-task",
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true

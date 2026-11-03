@@ -8,6 +8,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import Svg, { Circle, Defs, Ellipse, G, Path, RadialGradient, Stop } from "react-native-svg";
 import { moonLitPath, type Motion } from "@lumen/shared/ambient";
 import { useAmbient } from "./AmbientProvider";
+import { CelebrationLayer } from "./CelebrationLayer";
 
 function rng(seed: number) {
   return () => {
@@ -42,7 +43,7 @@ function phased(t: Animated.Value, phase: number, from: number, to: number) {
 
 /** `bodyTop` is where the sun and moon sit: below the screen's top controls, beside the clock. */
 export function SkyCard({ height, bodyTop, children }: { height: number; bodyTop: number; children?: ReactNode }) {
-  const { sky, theme, settings } = useAmbient();
+  const { sky, theme, settings, celebration } = useAmbient();
   const [width, setWidth] = useState(0);
   const onLayout = (e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width);
   const motion = settings.motion;
@@ -56,6 +57,7 @@ export function SkyCard({ height, bodyTop, children }: { height: number; bodyTop
           {sky.moon.visible > 0.05 && <Moon x={width - 78} y={bodyTop} phase={sky.moon.phase} opacity={sky.moon.visible * (1 - sky.sun.dim * 0.85)} />}
           {sky.sun.visible > 0.05 && <Sun x={width - 80} y={bodyTop + (1 - Math.min(1, Math.max(0, sky.altitude / 60))) * 30} color={sky.sun.color} opacity={sky.sun.visible * (theme.dark ? 0.8 : 1)} dim={sky.sun.dim} motion={motion} />}
           <Clouds width={width} height={height} cover={sky.clouds} wind={sky.wind} light={sky.cloudLight} shade={sky.cloudShade} motion={motion} />
+          {celebration && <CelebrationLayer celebration={celebration.celebration} width={width} height={height} motion={motion} />}
           {sky.precip !== "none" && <Precip width={width} height={height} snow={sky.precip === "snow"} intensity={sky.intensity} wind={sky.wind} motion={motion} />}
         </>
       )}
