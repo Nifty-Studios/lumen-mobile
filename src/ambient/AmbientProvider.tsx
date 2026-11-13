@@ -3,6 +3,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { AppState, useColorScheme } from "react-native";
+import { sceneOf } from "@lumen/shared/scenes";
 import { computeSky, themeFor, type LumenSettings, type SavedLocation, type SkyState, type ThemeTokens, type Weather } from "@lumen/shared/ambient";
 import { CELEBRATIONS, type ActiveCelebration, type CelebrationId } from "@lumen/shared/calendar";
 import { lumen } from "../db/lumen";
@@ -147,7 +148,10 @@ export function AmbientProvider({ children }: { children: ReactNode }) {
       }),
     [now, settings.location, settings.liveWeather, settings.envTime, settings.envWeather, weather],
   );
-  const theme = useMemo(() => themeFor(sky, dark, settings.accent, celebration?.celebration), [sky, dark, settings.accent, celebration]);
+  const theme = useMemo(
+    () => themeFor(sky, dark, settings.accent, celebration?.celebration, sceneOf(settings.scene)),
+    [sky, dark, settings.accent, celebration, settings.scene],
+  );
 
   const value = useMemo(
     () => ({ settings, update, sky, theme, weather, locateDevice, setLocation, refreshWeather, celebration, preview: setPreviewing }),

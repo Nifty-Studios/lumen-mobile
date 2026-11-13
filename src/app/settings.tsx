@@ -10,6 +10,8 @@ import type { ImportSummary } from "@lumen/shared/client";
 import { router } from "expo-router";
 import { lumen } from "../db/lumen";
 import { useAccount } from "../data/hooks";
+import { SCENES, type SceneId } from "@lumen/shared/scenes";
+import { ScenePreview } from "../ambient/SceneLayer";
 import { useAmbient } from "../ambient/AmbientProvider";
 import { weatherIcon } from "../ambient/weatherIcon";
 import { Icon } from "../components/Icon";
@@ -250,8 +252,9 @@ function Appearance() {
   const { settings, update } = useAmbient();
   return (
     <Section title="Appearance" note="Lumen shifts with the time of day.">
+      <ThemePicker />
       <AccentPicker />
-      <Label>Theme</Label>
+      <Label>Light or dark</Label>
       <Chips
         value={settings.theme}
         onChange={(theme) => update({ theme })}
@@ -296,6 +299,43 @@ function Appearance() {
       <Label>Temperature</Label>
       <Chips value={settings.temperatureUnit} onChange={(temperatureUnit) => update({ temperatureUnit })} options={[{ value: "c", label: "°C" }, { value: "f", label: "°F" }]} />
     </Section>
+  );
+}
+
+/** The theme: drawn decor that lives with the sky, or just the sky. */
+function ThemePicker() {
+  const c = useColors();
+  const { settings, update, theme } = useAmbient();
+  const card = (id: SceneId | null, name: string, icon: IconName) => {
+    const active = settings.scene === id;
+    return (
+      <Pressable key={id ?? "none"} onPress={() => update({ scene: id })} style={[styles.mood, { width: 150, backgroundColor: active ? c.accentSoft : c.hover }]}>
+        <LinearGradient colors={[theme.skyTop, theme.skyMid, theme.skyBottom]} style={{ height: 84, justifyContent: "flex-end", alignItems: "center" }}>
+          {id ? <ScenePreview scene={id} width={150} /> : <View style={[styles.moodSun, { backgroundColor: "#fff4d6", top: 14, opacity: 0.9 }]} />}
+          {active ? (
+            <View style={[styles.moodCheck, { backgroundColor: c.accent }]}>
+              <Icon name="check" size={12} strokeWidth={2.6} color={c.accentText} />
+            </View>
+          ) : null}
+        </LinearGradient>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 7, padding: 9 }}>
+          <Icon name={icon} size={15} color={active ? c.accent : c.muted} />
+          <Text numberOfLines={1} style={{ color: c.text, fontSize: 13.5, fontWeight: "600", flex: 1 }}>
+            {name}
+          </Text>
+        </View>
+      </Pressable>
+    );
+  };
+  return (
+    <>
+      <Label>Theme</Label>
+      <Text style={{ color: c.muted, fontSize: 13, marginBottom: 10 }}>A little world around your sky. Lamps come on at night, snow settles, and the umbrella comes out when it rains.</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }} style={{ marginBottom: 6 }}>
+        {card(null, "Just the sky", "cloud-sun")}
+        {SCENES.map((s) => card(s.id, s.name, s.icon))}
+      </ScrollView>
+    </>
   );
 }
 
