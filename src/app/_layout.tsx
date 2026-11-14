@@ -5,6 +5,7 @@ import { StatusBar } from "expo-status-bar";
 import { useFonts, Fraunces_300Light, Fraunces_600SemiBold } from "@expo-google-fonts/fraunces";
 import { lumen } from "../db/lumen";
 import { AmbientProvider } from "../ambient/AmbientProvider";
+import { SceneGround } from "../ambient/SceneLayer";
 import { AuthScreen } from "../components/AuthScreen";
 import { NoticeBanner, playChime } from "../components/NoticeBanner";
 import { updates } from "../lib/updates";
@@ -113,6 +114,7 @@ export default function RootLayout() {
       ) : (
         <>
           <ThemedStack />
+          <SceneGround />
           <NoticeBanner />
           <NotificationTaps />
         </>
